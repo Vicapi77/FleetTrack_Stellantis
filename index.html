@@ -566,7 +566,8 @@ async function loadAll() {
   fSnap.docs.forEach(d => { fotosData[d.id] = d.data(); });
   unidades.forEach(u => {
     const fd = fotosData[u.id] || {};
-    u.fotos = {1:fd.foto1||null, 2:fd.foto2||null, 3:fd.foto3||null, 4:fd.foto4||null, 5:fd.foto5||null};
+    u.fotos = {};
+    for (let i=1;i<=10;i++) u.fotos[i] = fd['foto'+i] || null;
   });
 }
 
@@ -733,7 +734,7 @@ async function setCumple(apartadoId, val) {
   }
 }
 
-// ─── EVIDENCIA: 5 fotos por unidad (base64 en Firestore), con opción cámara o galería ─
+// ─── EVIDENCIA: 10 fotos por unidad (base64 en Firestore), con opción cámara o galería ─
 function toBase64Compressed(file, maxDim=900, quality=0.65) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -757,7 +758,8 @@ function toBase64Compressed(file, maxDim=900, quality=0.65) {
 }
 
 function renderUnitPhotosSection(u) {
-  const slots = [1,2,3,4,5].map(i => `<span id="photo-slot-${i}">${renderPhotoSlotInner((u.fotos&&u.fotos[i])||null, i)}</span>`).join('');
+  const slotNums = Array.from({length:10}, (_,i)=>i+1);
+  const slots = slotNums.map(i => `<span id="photo-slot-${i}">${renderPhotoSlotInner((u.fotos&&u.fotos[i])||null, i)}</span>`).join('');
   return `<div class="unit-photos-block">
     <div class="cat-title">Evidencia fotográfica</div>
     <div class="unit-photos">${slots}</div>
