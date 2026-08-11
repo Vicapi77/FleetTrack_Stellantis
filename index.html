@@ -1,0 +1,1231 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FleetCheck · Inspección de Unidades Stellantis</title>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:       #060d07;
+    --surface:  #0c1710;
+    --surface2: #132019;
+    --border:   #1c3022;
+    --accent:   #34d058;      /* verde principal */
+    --accent2:  #a3e8b0;      /* verde claro */
+    --amber:    #f0a500;      /* ámbar — contraste */
+    --teal:     #2dd4bf;      /* cian — segundo acento */
+    --green:    #22c55e;      /* "cumple" */
+    --red:      #f87171;      /* "no cumple" */
+    --text:     #dff0e4;
+    --muted:    #5a7a62;
+    --font-head: 'Syne', sans-serif;
+    --font-body: 'DM Sans', sans-serif;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); font-family:var(--font-body); min-height:100vh; overflow-x:hidden; }
+
+  body::before {
+    content:''; position:fixed; inset:0; pointer-events:none; z-index:0;
+    background-image: linear-gradient(rgba(52,208,88,.04) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(52,208,88,.04) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+
+  /* NAV */
+  nav {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:0 32px; height:64px; flex-wrap:wrap; gap:10px;
+    background:var(--surface); border-bottom:1px solid var(--border);
+    position:sticky; top:0; z-index:100;
+  }
+  .logo { font-family:var(--font-head); font-weight:800; font-size:18px; letter-spacing:-.5px; }
+  .logo span { color:var(--accent); }
+  .logo-sub { font-size:10px; color:var(--muted); font-family:var(--font-body); font-weight:400; letter-spacing:1.5px; text-transform:uppercase; margin-top:-2px; }
+  .nav-tabs { display:flex; gap:4px; flex-wrap:wrap; }
+  .nav-tab {
+    padding:8px 18px; border-radius:8px; border:none; cursor:pointer;
+    font-family:var(--font-body); font-size:14px; font-weight:500;
+    background:transparent; color:var(--muted); transition:all .2s; white-space:nowrap;
+  }
+  .nav-tab.active { background:var(--accent); color:#040d06; font-weight:700; }
+  .nav-tab:hover:not(.active) { background:var(--surface2); color:var(--text); }
+
+  /* VIEWS */
+  .view { display:none; padding:32px; max-width:1400px; margin:0 auto; position:relative; z-index:1; }
+  .view.active { display:block; }
+
+  .section-title { font-family:var(--font-head); font-size:28px; font-weight:800; margin-bottom:4px; }
+  .section-sub { color:var(--muted); font-size:14px; margin-bottom:28px; }
+
+  /* PLANT BAR + SEARCH */
+  .list-toolbar { display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap; margin-bottom:24px; }
+  .plant-bar { display:flex; gap:8px; flex-wrap:wrap; }
+  .plant-btn {
+    padding:8px 18px; border-radius:99px; border:1.5px solid var(--border);
+    background:transparent; color:var(--muted); cursor:pointer;
+    font-family:var(--font-body); font-size:13px; font-weight:500; transition:all .2s;
+  }
+  .plant-btn:hover { border-color:var(--accent); color:var(--accent); }
+  .plant-btn.active { background:var(--accent); border-color:var(--accent); color:#040d06; font-weight:700; }
+  .search-box input { width:220px; }
+
+  /* UNITS GRID */
+  .units-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:18px; }
+  .unit-card {
+    background:var(--surface); border:1px solid var(--border); border-radius:16px;
+    overflow:hidden; transition:border-color .2s, box-shadow .2s; cursor:pointer;
+  }
+  .unit-card:hover { border-color:var(--accent); box-shadow:0 0 24px rgba(52,208,88,.08); }
+  .unit-header {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:14px 18px; border-bottom:1px solid var(--border);
+    background:var(--surface2);
+  }
+  .unit-name { font-family:var(--font-head); font-size:15px; font-weight:700; }
+  .badge-count { background:var(--accent); color:#040d06; font-weight:700; font-size:12px; padding:3px 10px; border-radius:99px; }
+  .unit-body { padding:16px 18px; display:flex; flex-direction:column; gap:8px; }
+  .progress-track { display:flex; height:8px; border-radius:99px; overflow:hidden; background:var(--border); }
+  .progress-fill.ok  { background:var(--green); }
+  .progress-fill.bad { background:var(--red); }
+  .unit-meta { display:flex; justify-content:space-between; font-size:12px; color:var(--muted); }
+
+  /* MODAL */
+  .modal-overlay {
+    display:none; position:fixed; inset:0; background:rgba(0,0,0,.8);
+    z-index:200; align-items:center; justify-content:center; padding:20px;
+    backdrop-filter:blur(4px);
+  }
+  .modal-overlay.open { display:flex; }
+  .modal {
+    background:var(--surface); border:1px solid var(--border); border-radius:20px;
+    width:100%; max-width:760px; max-height:90vh; overflow-y:auto;
+  }
+  .modal-header {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:20px 24px; border-bottom:1px solid var(--border);
+    position:sticky; top:0; background:var(--surface); z-index:1;
+  }
+  .modal-title { font-family:var(--font-head); font-size:17px; font-weight:700; }
+  .btn-close {
+    width:32px; height:32px; border-radius:8px; border:1px solid var(--border);
+    background:transparent; color:var(--text); cursor:pointer; font-size:18px;
+    display:flex; align-items:center; justify-content:center; transition:all .2s; flex-shrink:0;
+  }
+  .btn-close:hover { border-color:var(--red); color:var(--red); }
+  .modal-body { padding:16px 24px 24px; }
+
+  .modal-summary { display:flex; flex-direction:column; gap:8px; margin-bottom:14px; padding-bottom:14px; border-bottom:1px solid var(--border); }
+  .detail-row { display:flex; gap:8px; align-items:center; }
+  .detail-label { font-size:11px; color:var(--muted); width:110px; flex-shrink:0; font-weight:600; text-transform:uppercase; letter-spacing:.5px; }
+  .detail-val { font-size:14px; font-weight:600; }
+
+  /* CHECKLIST — compacto */
+  .cat-group { margin-bottom:12px; }
+  .cat-title {
+    font-family:var(--font-head); font-size:11px; font-weight:700; color:var(--accent);
+    text-transform:uppercase; letter-spacing:1px; margin-bottom:4px; padding-bottom:3px;
+    border-bottom:1px solid var(--border);
+  }
+  .check-row {
+    display:flex; align-items:center; gap:8px; padding:5px 4px;
+    border-bottom:1px solid rgba(28,48,34,.5);
+  }
+  .check-row:last-child { border-bottom:none; }
+  .check-name { width:190px; flex-shrink:0; font-size:12.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .check-toggle { display:flex; gap:4px; flex-shrink:0; }
+  .check-btn {
+    width:24px; height:24px; border-radius:7px; border:1.5px solid var(--border);
+    background:transparent; color:var(--muted); cursor:pointer; font-size:12px; font-weight:700;
+    display:flex; align-items:center; justify-content:center; transition:all .15s;
+  }
+  .check-btn.ok:hover  { border-color:var(--green); color:var(--green); }
+  .check-btn.bad:hover { border-color:var(--red); color:var(--red); }
+  .check-btn.ok.sel  { background:rgba(52,208,88,.18); border-color:var(--green); color:var(--green); }
+  .check-btn.bad.sel { background:rgba(248,113,113,.15); border-color:var(--red);   color:var(--red); }
+
+  .unit-photos-block { margin-bottom:16px; padding-bottom:16px; border-bottom:1px solid var(--border); }
+  .unit-photos { display:flex; gap:10px; flex-wrap:wrap; margin-top:8px; }
+  .photo-slot {
+    width:64px; height:64px; border-radius:10px; position:relative; overflow:hidden;
+    cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    font-size:10px; font-weight:600; background-size:cover; background-position:center; box-sizing:border-box;
+    transition:border-color .15s, color .15s;
+  }
+  .photo-slot.slot-empty { border:1.5px dashed var(--border); color:var(--muted); gap:2px; }
+  .photo-slot.slot-empty:hover { border-color:var(--teal); color:var(--teal); }
+  .photo-slot.slot-empty span { font-size:15px; line-height:1; }
+  .photo-slot.slot-filled { border:1.5px solid var(--green); }
+  .photo-slot.slot-loading { border:1.5px solid var(--border); color:var(--muted); }
+
+  .photo-menu { display:none; position:fixed; z-index:600; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:5px; flex-direction:column; gap:1px; box-shadow:0 8px 28px rgba(0,0,0,.5); }
+  .photo-menu.open { display:flex; }
+  .photo-menu button { background:transparent; border:none; color:var(--text); text-align:left; padding:8px 14px; border-radius:7px; cursor:pointer; font-size:12.5px; font-family:var(--font-body); white-space:nowrap; }
+  .photo-menu button:hover { background:var(--surface2); color:var(--accent); }
+  .photo-menu button.danger:hover { color:var(--red); }
+
+  /* BUTTONS */
+  .btn {
+    padding:10px 20px; border-radius:10px; border:none; cursor:pointer;
+    font-family:var(--font-body); font-size:14px; font-weight:600; transition:all .2s;
+  }
+  .btn-primary { background:var(--accent); color:#040d06; }
+  .btn-primary:hover { background:#2563eb; }
+  .btn-secondary { background:var(--surface2); color:var(--text); border:1px solid var(--border); }
+  .btn-secondary:hover { border-color:var(--accent); color:var(--accent); }
+  .btn-danger { background:rgba(248,113,113,.1); color:var(--red); border:1px solid rgba(248,113,113,.25); }
+  .btn-danger:hover { background:rgba(248,113,113,.2); }
+  .btn-sm { padding:7px 14px; font-size:12px; border-radius:8px; }
+
+  /* FORM */
+  input, select, textarea {
+    background:var(--bg); border:1.5px solid var(--border); border-radius:10px;
+    color:var(--text); font-family:var(--font-body); font-size:14px;
+    padding:10px 14px; outline:none; transition:border-color .2s;
+  }
+  input:focus, select:focus, textarea:focus { border-color:var(--accent); }
+  select option { background:var(--surface); }
+
+  /* TOAST */
+  .toast {
+    position:fixed; bottom:24px; right:24px; background:var(--surface);
+    border:1px solid var(--border); border-radius:12px; padding:14px 20px;
+    font-size:14px; z-index:999; transform:translateY(80px); opacity:0;
+    transition:all .3s; display:flex; align-items:center; gap:10px;
+  }
+  .toast.show { transform:translateY(0); opacity:1; }
+  .toast.success { border-color:var(--green); }
+  .toast.error   { border-color:var(--red); }
+
+  /* LOADING / EMPTY */
+  .loading { text-align:center; padding:60px; color:var(--muted); }
+  .spinner { width:36px; height:36px; border:3px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin .8s linear infinite; margin:0 auto 12px; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .empty { text-align:center; padding:60px 20px; color:var(--muted); }
+  .empty-icon { font-size:48px; margin-bottom:12px; }
+  .empty-mini { color:var(--muted); font-size:12px; padding:16px 4px; text-align:center; }
+
+  /* FULLSCREEN */
+  .img-fullscreen { display:none; position:fixed; inset:0; background:rgba(0,0,0,.92); z-index:500; align-items:center; justify-content:center; cursor:zoom-out; }
+  .img-fullscreen.open { display:flex; }
+  .img-fullscreen img { max-width:92vw; max-height:92vh; border-radius:12px; }
+
+  /* AVANCE VIEW */
+  .stat-cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:14px; margin-bottom:28px; }
+  .stat-card { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:18px 20px; }
+  .stat-value { font-family:var(--font-head); font-size:30px; font-weight:800; }
+  .stat-label { font-size:12px; color:var(--muted); margin-top:4px; }
+
+  .avance-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+  .avance-panel { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:20px 22px; }
+  .panel-title { font-family:var(--font-head); font-size:14px; font-weight:700; margin-bottom:16px; }
+
+  .bar-row { margin-bottom:14px; }
+  .bar-row:last-child { margin-bottom:0; }
+  .bar-label { font-size:12px; margin-bottom:5px; }
+  .bar-track { height:8px; border-radius:99px; background:var(--bg); border:1px solid var(--border); overflow:hidden; }
+  .bar-fill { height:100%; background:var(--teal); border-radius:99px; }
+  .bar-vals { display:flex; justify-content:space-between; font-size:11px; color:var(--muted); margin-top:4px; }
+
+  .donut-wrap { display:flex; align-items:center; gap:22px; flex-wrap:wrap; }
+  .donut-legend { display:flex; flex-direction:column; gap:9px; font-size:12.5px; }
+  .legend-row { display:flex; align-items:center; gap:8px; }
+  .legend-dot { width:10px; height:10px; border-radius:3px; flex-shrink:0; }
+  .legend-pct { color:var(--muted); }
+
+  .mini-donuts-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(84px,1fr)); gap:14px; }
+  .mini-donut-card { display:flex; flex-direction:column; align-items:center; gap:6px; text-align:center; }
+  .mini-donut-label { font-size:11px; font-weight:600; }
+  .mini-donut-pct { font-size:10.5px; color:var(--muted); }
+
+  .gantt-axis-row { display:flex; align-items:flex-end; gap:12px; margin-bottom:14px; }
+  .gantt-axis-spacer { width:170px; flex-shrink:0; }
+  .gantt-axis-spacer-right { width:70px; flex-shrink:0; }
+  .gantt-axis { position:relative; flex:1; height:22px; border-bottom:1px solid var(--border); }
+  .gantt-axis-tick { position:absolute; bottom:6px; transform:translateX(-50%); font-size:10px; color:var(--muted); white-space:nowrap; }
+  .gantt-axis-tick::after { content:''; position:absolute; bottom:-6px; left:50%; width:1px; height:6px; background:var(--border); }
+  .gantt-rows { display:flex; flex-direction:column; gap:10px; max-height:420px; overflow-y:auto; }
+  .gantt-row { display:flex; align-items:center; gap:12px; }
+  .gantt-label { width:170px; flex-shrink:0; font-size:12px; font-weight:600; display:flex; flex-direction:column; }
+  .g-planta { font-size:10px; color:var(--muted); font-weight:400; text-transform:uppercase; letter-spacing:.5px; }
+  .gantt-track { position:relative; flex:1; height:18px; background:var(--bg); border:1px solid var(--border); border-radius:6px; }
+  .gantt-gridline { position:absolute; top:0; bottom:0; width:1px; background:rgba(28,48,34,.6); }
+  .gantt-marker { position:absolute; top:50%; transform:translate(-50%,-50%); width:16px; height:16px; border-radius:4px; background:var(--accent); border:2px solid var(--surface); cursor:pointer; transition:transform .15s; }
+  .gantt-marker:hover { transform:translate(-50%,-50%) scale(1.2); background:var(--accent2); }
+  .gantt-today { position:absolute; top:-4px; bottom:-4px; width:2px; background:var(--amber); opacity:.7; }
+  .gantt-date { width:70px; text-align:right; font-size:11px; color:var(--muted); flex-shrink:0; }
+
+  .rank-list { display:flex; flex-direction:column; gap:10px; }
+  .rank-row { display:flex; align-items:center; gap:14px; padding:8px 6px; border-radius:10px; cursor:pointer; transition:background .15s; }
+  .rank-row:hover { background:var(--surface2); }
+  .rank-unit { width:190px; flex-shrink:0; font-size:13px; font-weight:600; display:flex; flex-direction:column; }
+  .rank-planta { font-size:10px; color:var(--muted); font-weight:400; text-transform:uppercase; letter-spacing:.5px; }
+  .rank-bar-track { flex:1; height:7px; border-radius:99px; background:var(--bg); border:1px solid var(--border); overflow:hidden; }
+  .rank-bar-fill { height:100%; background:var(--amber); border-radius:99px; }
+  .rank-pct { width:42px; text-align:right; font-size:12px; font-weight:700; color:var(--muted); flex-shrink:0; }
+
+  /* EDIT VIEW */
+  .edit-grid { display:grid; grid-template-columns:1fr 1fr; gap:22px; }
+  .edit-panel { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:22px; }
+  .edit-panel .panel-title { display:flex; align-items:center; gap:8px; }
+  .add-form { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; }
+  .add-form input, .add-form select { flex:1; min-width:110px; }
+  .edit-list { display:flex; flex-direction:column; gap:6px; max-height:420px; overflow-y:auto; }
+  .edit-item {
+    display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:10px;
+    background:var(--bg); border:1px solid transparent;
+  }
+  .edit-item:hover { border-color:var(--border); }
+  .edit-item-name { font-size:13px; flex:1; }
+  .edit-item-cat {
+    font-size:10px; text-transform:uppercase; letter-spacing:.5px; color:var(--teal);
+    background:rgba(45,212,191,.1); padding:3px 8px; border-radius:99px; flex-shrink:0;
+  }
+  .edit-item select { padding:6px 10px; font-size:12px; }
+  .btn-icon-del {
+    width:28px; height:28px; border-radius:7px; border:1px solid var(--border); background:transparent;
+    color:var(--muted); cursor:pointer; flex-shrink:0; font-size:13px; transition:all .15s;
+  }
+  .btn-icon-del:hover { border-color:var(--red); color:var(--red); }
+
+  @media (max-width:760px) {
+    .avance-grid, .edit-grid { grid-template-columns:1fr; }
+    nav { padding:10px 16px; height:auto; }
+    .view { padding:20px 16px; }
+    .rank-unit { width:120px; }
+    .donut-wrap { justify-content:center; }
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div>
+    <div class="logo">Fleet<span>Check</span></div>
+    <div class="logo-sub">STELLANTIS · Inspección de Unidades</div>
+  </div>
+  <div class="nav-tabs">
+    <button class="nav-tab active" data-target="view-list" onclick="switchView('view-list')">📋 Visualización</button>
+    <button class="nav-tab" data-target="view-avance" onclick="switchView('view-avance')">📊 Avance</button>
+    <button class="nav-tab" data-target="view-edit" onclick="switchView('view-edit')">⚙️ Editar</button>
+  </div>
+</nav>
+
+<!-- VIEW: LIST -->
+<div id="view-list" class="view active">
+  <div class="section-title">Unidades por Planta</div>
+  <div class="section-sub">Selecciona una planta y una unidad para revisar sus apartados</div>
+  <div class="list-toolbar">
+    <div class="plant-bar" id="plant-bar"><div class="loading"><div class="spinner"></div></div></div>
+    <div class="search-box"><input type="text" id="search-input" placeholder="Buscar unidad…" oninput="onSearch(this.value)"></div>
+  </div>
+  <div id="units-container">
+    <div class="empty"><div class="empty-icon">🚌</div><div>Cargando unidades…</div></div>
+  </div>
+</div>
+
+<!-- VIEW: AVANCE -->
+<div id="view-avance" class="view">
+  <div class="loading"><div class="spinner"></div></div>
+</div>
+
+<!-- VIEW: EDIT -->
+<div id="view-edit" class="view">
+  <div class="section-title">Editar Unidades y Apartados</div>
+  <div class="section-sub">Las 5 plantas son fijas. Aquí puedes dar de alta o baja unidades y los puntos de revisión que se les aplican.</div>
+  <div class="edit-grid">
+    <div class="edit-panel">
+      <div class="panel-title">Unidades <span class="badge-count" id="edit-unit-count">0</span></div>
+      <div class="add-form">
+        <input id="new-unidad-num" type="text" placeholder="Número de unidad">
+        <select id="new-unidad-planta"></select>
+        <button class="btn btn-primary btn-sm" onclick="addUnidad()">＋ Agregar</button>
+      </div>
+      <div class="edit-list" id="edit-unidades-list"></div>
+    </div>
+    <div class="edit-panel">
+      <div class="panel-title">Apartados <span class="badge-count" id="edit-ap-count">0</span></div>
+      <div class="add-form">
+        <input id="new-ap-cat" type="text" placeholder="Categoría" list="cat-list" style="max-width:130px;">
+        <datalist id="cat-list"></datalist>
+        <input id="new-ap-nombre" type="text" placeholder="Nombre del punto">
+        <button class="btn btn-primary btn-sm" onclick="addApartado()">＋ Agregar</button>
+      </div>
+      <div class="edit-list" id="edit-apartados-list"></div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: UNIT CHECKLIST -->
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-title">Unidad</div>
+      <button class="btn-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<!-- EVIDENCE OPTIONS MENU -->
+<div class="photo-menu" id="photo-menu"></div>
+<input type="file" id="global-file-input" accept="image/*" style="display:none">
+
+<!-- FULLSCREEN IMAGE -->
+<div class="img-fullscreen" id="img-fs" onclick="closeFullscreen()">
+  <img id="img-fs-src" src="">
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ─── FIREBASE ─────────────────────────────────────────────────────────────────
+const firebaseConfig = {
+  apiKey: "AIzaSyD3uFqBpV991wnc5IDRRd9eblNOyABtF4o",
+  authDomain: "fleettrack-yfais.firebaseapp.com",
+  projectId: "fleettrack-yfais",
+  storageBucket: "fleettrack-yfais.firebasestorage.app",
+  messagingSenderId: "6118541836",
+  appId: "1:6118541836:web:b384d6a84dbc3ec53abc29"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+// ─── FIXED PLANTS ─────────────────────────────────────────────────────────────
+const PLANTAS = ["CAMIONES","EXTENSION","MOTORES NORTE","MOTORES SUR","VAN"];
+const COLOR_OK  = '#34d058';
+const COLOR_BAD = '#f87171';
+const COLOR_PEND = '#1c3022';
+
+// ─── SEED DATA (loaded once, only if collections are empty) ───────────────────
+const SEED_UNIDADES = [
+  {numero:"4454",planta:"CAMIONES"},{numero:"4630",planta:"CAMIONES"},{numero:"4640",planta:"CAMIONES"},
+  {numero:"4647",planta:"CAMIONES"},{numero:"4648",planta:"CAMIONES"},{numero:"4659",planta:"CAMIONES"},
+  {numero:"4662",planta:"CAMIONES"},{numero:"4672",planta:"CAMIONES"},{numero:"4685",planta:"CAMIONES"},
+  {numero:"4692",planta:"CAMIONES"},{numero:"4702",planta:"CAMIONES"},{numero:"4704",planta:"CAMIONES"},
+  {numero:"4721",planta:"CAMIONES"},{numero:"4722",planta:"CAMIONES"},{numero:"4737",planta:"CAMIONES"},
+  {numero:"4748",planta:"CAMIONES"},{numero:"4759",planta:"CAMIONES"},{numero:"4760",planta:"CAMIONES"},
+  {numero:"4762",planta:"CAMIONES"},{numero:"4770",planta:"CAMIONES"},{numero:"4801",planta:"CAMIONES"},
+  {numero:"4803",planta:"CAMIONES"},{numero:"4805",planta:"CAMIONES"},{numero:"4807",planta:"CAMIONES"},
+  {numero:"4942",planta:"CAMIONES"},{numero:"5388",planta:"CAMIONES"},{numero:"5691",planta:"CAMIONES"},
+  {numero:"5795",planta:"CAMIONES"},{numero:"5893",planta:"CAMIONES"},{numero:"6117",planta:"CAMIONES"},
+  {numero:"6322",planta:"CAMIONES"},{numero:"6431",planta:"CAMIONES"},{numero:"6448",planta:"CAMIONES"},
+  {numero:"6453",planta:"CAMIONES"},{numero:"6486",planta:"CAMIONES"},{numero:"6902",planta:"CAMIONES"},
+  {numero:"7411",planta:"CAMIONES"},{numero:"7412",planta:"CAMIONES"},{numero:"7586",planta:"CAMIONES"},
+  {numero:"7952",planta:"CAMIONES"},{numero:"9630",planta:"CAMIONES"},{numero:"9631",planta:"CAMIONES"},
+  {numero:"9633",planta:"CAMIONES"},{numero:"12798",planta:"CAMIONES"},{numero:"12802",planta:"CAMIONES"},
+  {numero:"12999",planta:"CAMIONES"},{numero:"13906",planta:"CAMIONES"},{numero:"14214",planta:"CAMIONES"},
+  {numero:"14243",planta:"CAMIONES"},{numero:"15186",planta:"CAMIONES"},{numero:"15210",planta:"CAMIONES"},
+  {numero:"15450",planta:"CAMIONES"},{numero:"16823",planta:"CAMIONES"},{numero:"16825",planta:"CAMIONES"},
+  {numero:"16882",planta:"CAMIONES"},{numero:"16891",planta:"CAMIONES"},{numero:"16893",planta:"CAMIONES"},
+  {numero:"16895",planta:"CAMIONES"},{numero:"16897",planta:"CAMIONES"},{numero:"4969",planta:"EXTENSION"},
+  {numero:"5890",planta:"EXTENSION"},{numero:"7800",planta:"EXTENSION"},{numero:"10345",planta:"EXTENSION"},
+  {numero:"11012",planta:"EXTENSION"},{numero:"11013",planta:"EXTENSION"},{numero:"11014",planta:"EXTENSION"},
+  {numero:"11016",planta:"EXTENSION"},{numero:"11167",planta:"EXTENSION"},{numero:"11176",planta:"EXTENSION"},
+  {numero:"11178",planta:"EXTENSION"},{numero:"11179",planta:"EXTENSION"},{numero:"11180",planta:"EXTENSION"},
+  {numero:"11192",planta:"EXTENSION"},{numero:"11200",planta:"EXTENSION"},{numero:"11588",planta:"EXTENSION"},
+  {numero:"11860",planta:"EXTENSION"},{numero:"12629",planta:"EXTENSION"},{numero:"12723",planta:"EXTENSION"},
+  {numero:"12867",planta:"EXTENSION"},{numero:"12949",planta:"EXTENSION"},{numero:"13003",planta:"EXTENSION"},
+  {numero:"13024",planta:"EXTENSION"},{numero:"13565",planta:"EXTENSION"},{numero:"13567",planta:"EXTENSION"},
+  {numero:"14197",planta:"EXTENSION"},{numero:"14879",planta:"EXTENSION"},{numero:"14880",planta:"EXTENSION"},
+  {numero:"15165",planta:"EXTENSION"},{numero:"15166",planta:"EXTENSION"},{numero:"15187",planta:"EXTENSION"},
+  {numero:"15189",planta:"EXTENSION"},{numero:"15449",planta:"EXTENSION"},{numero:"15560",planta:"EXTENSION"},
+  {numero:"15767",planta:"EXTENSION"},{numero:"16070",planta:"EXTENSION"},{numero:"16071",planta:"EXTENSION"},
+  {numero:"16072",planta:"EXTENSION"},{numero:"16073",planta:"EXTENSION"},{numero:"16074",planta:"EXTENSION"},
+  {numero:"16501",planta:"EXTENSION"},{numero:"16502",planta:"EXTENSION"},{numero:"16507",planta:"EXTENSION"},
+  {numero:"16517",planta:"EXTENSION"},{numero:"16520",planta:"EXTENSION"},{numero:"16521",planta:"EXTENSION"},
+  {numero:"16879",planta:"EXTENSION"},{numero:"16889",planta:"EXTENSION"},{numero:"16890",planta:"EXTENSION"},
+  {numero:"16894",planta:"EXTENSION"},{numero:"16899",planta:"EXTENSION"},{numero:"4641",planta:"MOTORES NORTE"},
+  {numero:"4698",planta:"MOTORES NORTE"},{numero:"4701",planta:"MOTORES NORTE"},{numero:"4733",planta:"MOTORES NORTE"},
+  {numero:"4756",planta:"MOTORES NORTE"},{numero:"5614",planta:"MOTORES NORTE"},{numero:"5692",planta:"MOTORES NORTE"},
+  {numero:"5891",planta:"MOTORES NORTE"},{numero:"6433",planta:"MOTORES NORTE"},{numero:"6662",planta:"MOTORES NORTE"},
+  {numero:"7099",planta:"MOTORES NORTE"},{numero:"7409",planta:"MOTORES NORTE"},{numero:"7410",planta:"MOTORES NORTE"},
+  {numero:"7413",planta:"MOTORES NORTE"},{numero:"9632",planta:"MOTORES NORTE"},{numero:"11011",planta:"MOTORES NORTE"},
+  {numero:"11015",planta:"MOTORES NORTE"},{numero:"12866",planta:"MOTORES NORTE"},{numero:"13001",planta:"MOTORES NORTE"},
+  {numero:"13354",planta:"MOTORES NORTE"},{numero:"13356",planta:"MOTORES NORTE"},{numero:"13497",planta:"MOTORES NORTE"},
+  {numero:"13566",planta:"MOTORES NORTE"},{numero:"15288",planta:"MOTORES NORTE"},{numero:"16100",planta:"MOTORES NORTE"},
+  {numero:"16111",planta:"MOTORES NORTE"},{numero:"16118",planta:"MOTORES NORTE"},{numero:"16120",planta:"MOTORES NORTE"},
+  {numero:"16122",planta:"MOTORES NORTE"},{numero:"16124",planta:"MOTORES NORTE"},{numero:"16127",planta:"MOTORES NORTE"},
+  {numero:"16129",planta:"MOTORES NORTE"},{numero:"16824",planta:"MOTORES NORTE"},{numero:"16826",planta:"MOTORES NORTE"},
+  {numero:"16898",planta:"MOTORES NORTE"},{numero:"16937",planta:"MOTORES NORTE"},{numero:"16938",planta:"MOTORES NORTE"},
+  {numero:"11803",planta:"MOTORES SUR"},{numero:"12633",planta:"MOTORES SUR"},{numero:"15895",planta:"MOTORES SUR"},
+  {numero:"15934",planta:"MOTORES SUR"},{numero:"15980",planta:"MOTORES SUR"},{numero:"15981",planta:"MOTORES SUR"},
+  {numero:"15984",planta:"MOTORES SUR"},{numero:"15987",planta:"MOTORES SUR"},{numero:"15988",planta:"MOTORES SUR"},
+  {numero:"16431",planta:"MOTORES SUR"},{numero:"16432",planta:"MOTORES SUR"},{numero:"16503",planta:"MOTORES SUR"},
+  {numero:"16504",planta:"MOTORES SUR"},{numero:"16505",planta:"MOTORES SUR"},{numero:"16506",planta:"MOTORES SUR"},
+  {numero:"16518",planta:"MOTORES SUR"},{numero:"16519",planta:"MOTORES SUR"},{numero:"16892",planta:"MOTORES SUR"},
+  {numero:"4669",planta:"VAN"},{numero:"4671",planta:"VAN"},{numero:"4687",planta:"VAN"},
+  {numero:"4703",planta:"VAN"},{numero:"4718",planta:"VAN"},{numero:"5470",planta:"VAN"},
+  {numero:"6115",planta:"VAN"},{numero:"6432",planta:"VAN"},{numero:"6434",planta:"VAN"},
+  {numero:"7822",planta:"VAN"},{numero:"9470",planta:"VAN"},{numero:"9610",planta:"VAN"},
+  {numero:"11038",planta:"VAN"},{numero:"11177",planta:"VAN"},{numero:"12799",planta:"VAN"},
+  {numero:"12950",planta:"VAN"},{numero:"13025",planta:"VAN"},{numero:"13904",planta:"VAN"},
+  {numero:"14215",planta:"VAN"},{numero:"15982",planta:"VAN"},{numero:"15983",planta:"VAN"},
+  {numero:"15985",planta:"VAN"},{numero:"15986",planta:"VAN"},{numero:"15989",planta:"VAN"},
+  {numero:"16087",planta:"VAN"},{numero:"16088",planta:"VAN"},{numero:"16089",planta:"VAN"},
+  {numero:"16090",planta:"VAN"},{numero:"16091",planta:"VAN"},{numero:"16515",planta:"VAN"},
+  {numero:"16516",planta:"VAN"},{numero:"16567",planta:"VAN"},{numero:"16816",planta:"VAN"},
+  {numero:"16822",planta:"VAN"},{numero:"16827",planta:"VAN"},{numero:"16842",planta:"VAN"},
+  {numero:"16843",planta:"VAN"},{numero:"16896",planta:"VAN"}
+];
+
+const SEED_APARTADOS = [
+  {categoria:"Imagen", nombre:"Limpieza"},
+  {categoria:"Imagen", nombre:"Carroceria"},
+  {categoria:"Interior", nombre:"Celular Red"},
+  {categoria:"Interior", nombre:"Retrovisor"},
+  {categoria:"Interior", nombre:"Cinturones"},
+  {categoria:"Interior", nombre:"Asientos"},
+  {categoria:"Interior", nombre:"Escaleras"},
+  {categoria:"Interior", nombre:"Cortinas"},
+  {categoria:"Interior", nombre:"Señal."},
+  {categoria:"Interior", nombre:"Asientos Pref."},
+  {categoria:"Interior", nombre:"Botiquin"},
+  {categoria:"Interior", nombre:"Extintor"},
+  {categoria:"Interior", nombre:"Poliza"},
+  {categoria:"Documentos", nombre:"Tarj. Circ."},
+  {categoria:"Documentos", nombre:"Licencia"},
+  {categoria:"Documentos", nombre:"Placas"},
+  {categoria:"Exterior", nombre:"Faros de niebla"},
+  {categoria:"Exterior", nombre:"Espejos laterales"},
+  {categoria:"Exterior", nombre:"Espejos Banqueteros"},
+  {categoria:"Exterior", nombre:"Llantas y Birlos"},
+  {categoria:"Exterior", nombre:"Limpia parabrisas"},
+  {categoria:"Exterior", nombre:"Ventanas laterales"},
+  {categoria:"Exterior", nombre:"Ventana Puerta"},
+  {categoria:"Exterior", nombre:"Rotulacion"},
+  {categoria:"Exterior", nombre:"Luces externas"},
+  {categoria:"Exterior", nombre:"Luces internas"},
+  {categoria:"Exterior", nombre:"Luces Stop"},
+  {categoria:"Exterior", nombre:"Luces Reversa"},
+  {categoria:"Exterior", nombre:"Direccionales"},
+  {categoria:"Exterior", nombre:"Intermitentes"},
+  {categoria:"Exterior", nombre:"AC"},
+  {categoria:"Exterior", nombre:"Puerta"},
+  {categoria:"Exterior", nombre:"Asientos reclinables"},
+  {categoria:"Exterior", nombre:"Alarma reversa"},
+  {categoria:"Exterior", nombre:"Display"}
+];
+
+// ─── STATE ────────────────────────────────────────────────────────────────────
+let unidades  = [];
+let apartados = [];
+let checklistMap = {};   // key `${unidadId}_${apartadoId}` -> {cumple, updatedAt}
+let selectedPlant = PLANTAS[0];
+let searchQuery = '';
+let currentUnitId = null;
+let avancePlantFilter = 'todas';
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+async function init() {
+  try {
+    await ensureSeed();
+    await loadAll();
+    renderPlantBar();
+    renderUnits();
+    renderEditPlantaSelect();
+  } catch (e) {
+    showToast('Error inicializando: '+e.message, 'error');
+  }
+}
+
+async function ensureSeed() {
+  const uSnap = await db.collection('ste_unidades').limit(1).get();
+  if (uSnap.empty) {
+    const batch = db.batch();
+    SEED_UNIDADES.forEach(u => {
+      batch.set(db.collection('ste_unidades').doc(u.numero), {numero:u.numero, planta:u.planta});
+    });
+    await batch.commit();
+  }
+  const aSnap = await db.collection('ste_apartados').limit(1).get();
+  if (aSnap.empty) {
+    const batch2 = db.batch();
+    SEED_APARTADOS.forEach((a,i) => {
+      batch2.set(db.collection('ste_apartados').doc(), {categoria:a.categoria, nombre:a.nombre, orden:i});
+    });
+    await batch2.commit();
+  }
+}
+
+async function loadAll() {
+  const [uSnap, aSnap, cSnap, fSnap] = await Promise.all([
+    db.collection('ste_unidades').get(),
+    db.collection('ste_apartados').orderBy('orden').get(),
+    db.collection('ste_checklist').get(),
+    db.collection('ste_unidad_fotos').get()
+  ]);
+  unidades  = uSnap.docs.map(d => ({id:d.id, ...d.data()}));
+  apartados = aSnap.docs.map(d => ({id:d.id, ...d.data()}));
+  checklistMap = {};
+  cSnap.docs.forEach(d => { checklistMap[d.id] = d.data(); });
+  const fotosData = {};
+  fSnap.docs.forEach(d => { fotosData[d.id] = d.data(); });
+  unidades.forEach(u => {
+    const fd = fotosData[u.id] || {};
+    u.fotos = {1:fd.foto1||null, 2:fd.foto2||null, 3:fd.foto3||null, 4:fd.foto4||null, 5:fd.foto5||null};
+  });
+}
+
+function ckey(unidadId, apartadoId) { return unidadId+'_'+apartadoId; }
+function getItem(unidadId, apartadoId) { return checklistMap[ckey(unidadId,apartadoId)] || {}; }
+
+// ─── STATS ────────────────────────────────────────────────────────────────────
+function unitStats(u) {
+  let revisado = 0, cumple = 0;
+  const total = apartados.length || 1;
+  apartados.forEach(a => {
+    const c = getItem(u.id, a.id);
+    if (c.cumple === true || c.cumple === false) revisado++;
+    if (c.cumple === true) cumple++;
+  });
+  return {
+    revisado, cumple, total,
+    pctRevisado: Math.round(revisado/total*100),
+    pctCumple: revisado ? Math.round(cumple/revisado*100) : 0
+  };
+}
+
+// ─── PLANT BAR ────────────────────────────────────────────────────────────────
+function renderPlantBar() {
+  const bar = document.getElementById('plant-bar');
+  bar.innerHTML = PLANTAS.map(p => {
+    const count = unidades.filter(u => u.planta === p).length;
+    return `<button class="plant-btn${selectedPlant===p?' active':''}" onclick="selectPlant('${escAttr(p)}')">${escHtml(p)} <span style="opacity:.6">(${count})</span></button>`;
+  }).join('');
+}
+
+function selectPlant(p) { selectedPlant = p; renderPlantBar(); renderUnits(); }
+function onSearch(v) { searchQuery = v.trim().toLowerCase(); renderUnits(); }
+
+// ─── UNITS GRID ───────────────────────────────────────────────────────────────
+function renderUnits() {
+  const container = document.getElementById('units-container');
+  let list = unidades.filter(u => u.planta === selectedPlant);
+  if (searchQuery) list = list.filter(u => u.numero.toLowerCase().includes(searchQuery));
+  list.sort((a,b) => Number(a.numero) - Number(b.numero));
+  if (!list.length) { container.innerHTML = '<div class="empty"><div class="empty-icon">🚌</div><div>Sin unidades para mostrar</div></div>'; return; }
+  container.innerHTML = `<div class="units-grid">${list.map(renderUnitCard).join('')}</div>`;
+}
+
+function renderUnitCard(u) {
+  const s = unitStats(u);
+  const okPct  = s.total ? s.cumple/s.total*100 : 0;
+  const badPct = s.total ? (s.revisado-s.cumple)/s.total*100 : 0;
+  const cumpleColor = !s.revisado ? 'var(--muted)' : s.pctCumple>=80 ? 'var(--green)' : s.pctCumple>=50 ? 'var(--amber)' : 'var(--red)';
+  return `<div class="unit-card" onclick="openUnit('${u.id}')">
+    <div class="unit-header">
+      <div class="unit-name">🚌 ${escHtml(u.numero)}</div>
+      <span class="badge-count">${s.revisado}/${s.total}</span>
+    </div>
+    <div class="unit-body">
+      <div class="progress-track">
+        <div class="progress-fill ok"  style="width:${okPct}%"></div>
+        <div class="progress-fill bad" style="width:${badPct}%"></div>
+      </div>
+      <div class="unit-meta">
+        <span>${s.pctRevisado}% revisado</span>
+        <span style="color:${cumpleColor};font-weight:600;">${s.revisado ? s.pctCumple+'% cumple' : 'Sin revisar'}</span>
+      </div>
+    </div>
+  </div>`;
+}
+
+// ─── CHECKLIST MODAL ──────────────────────────────────────────────────────────
+function openUnit(id) {
+  currentUnitId = id;
+  renderUnitModal();
+  document.getElementById('modal').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.remove('open');
+  currentUnitId = null;
+  closeEvidMenu();
+}
+document.getElementById('modal').addEventListener('click', function(e){ if(e.target===this) closeModal(); });
+
+function groupApartados() {
+  const groups = []; const idx = {};
+  apartados.forEach(a => {
+    if (!(a.categoria in idx)) { idx[a.categoria] = groups.length; groups.push({categoria:a.categoria, items:[]}); }
+    groups[idx[a.categoria]].items.push(a);
+  });
+  return groups;
+}
+
+function renderUnitModal() {
+  const u = unidades.find(x => x.id === currentUnitId); if (!u) return;
+  document.getElementById('modal-title').textContent = `🚌 Unidad ${u.numero} · ${u.planta}`;
+  const groups = groupApartados();
+  const groupsHtml = groups.map(g => `
+    <div class="cat-group">
+      <div class="cat-title">${escHtml(g.categoria)}</div>
+      ${g.items.map(a => renderCheckRow(u,a)).join('')}
+    </div>`).join('');
+  document.getElementById('modal-body').innerHTML = `
+    <div class="modal-summary" id="modal-summary-body">${renderSummaryInner(u)}</div>
+    ${renderUnitPhotosSection(u)}
+    ${groupsHtml}
+  `;
+}
+
+function renderSummaryInner(u) {
+  const s = unitStats(u);
+  const cumpleColor = !s.revisado ? 'var(--muted)' : s.pctCumple>=80 ? 'var(--green)' : s.pctCumple>=50 ? 'var(--amber)' : 'var(--red)';
+  return `
+    <div class="detail-row"><div class="detail-label">Avance</div><div class="detail-val">${s.revisado}/${s.total} puntos (${s.pctRevisado}%)</div></div>
+    <div class="detail-row"><div class="detail-label">Cumplimiento</div><div class="detail-val" style="color:${cumpleColor}">${s.revisado ? s.pctCumple+'% ('+s.cumple+'/'+s.revisado+')' : 'Sin revisar aún'}</div></div>
+    <div class="detail-row"><div class="detail-label">Fecha atención</div><div class="detail-val"><input type="date" value="${u.fechaAtencion||''}" onchange="changeFechaAtencion('${u.id}',this.value)" onclick="if(this.showPicker){try{this.showPicker();}catch(e){}}" style="padding:6px 10px;font-size:12px;"></div></div>
+  `;
+}
+
+async function changeFechaAtencion(id, value) {
+  try {
+    if (value) {
+      await db.collection('ste_unidades').doc(id).update({fechaAtencion: value});
+    } else {
+      await db.collection('ste_unidades').doc(id).update({fechaAtencion: firebase.firestore.FieldValue.delete()});
+    }
+    const u = unidades.find(x=>x.id===id);
+    if (u) { if (value) u.fechaAtencion = value; else delete u.fechaAtencion; }
+    showToast('Fecha de atención actualizada ✓', 'success');
+  } catch(e) { showToast('Error: '+e.message, 'error'); }
+}
+
+function renderCheckRow(u, a) {
+  const c = getItem(u.id, a.id);
+  const cumple = c.cumple;
+  return `<div class="check-row" data-ap="${a.id}">
+    <div class="check-name">${escHtml(a.nombre)}</div>
+    <div class="check-toggle">
+      <button class="check-btn ok${cumple===true?' sel':''}"  id="btn-ok-${a.id}"  onclick="setCumple('${a.id}',true)"  title="Cumple">✓</button>
+      <button class="check-btn bad${cumple===false?' sel':''}" id="btn-bad-${a.id}" onclick="setCumple('${a.id}',false)" title="No cumple">✗</button>
+    </div>
+  </div>`;
+}
+
+async function setCumple(apartadoId, val) {
+  const u = unidades.find(x => x.id === currentUnitId); if (!u) return;
+  const key = ckey(u.id, apartadoId);
+  const cur = checklistMap[key] ? checklistMap[key].cumple : undefined;
+  const newVal = (cur === val) ? null : val;
+  checklistMap[key] = {...(checklistMap[key]||{}), cumple:newVal};
+
+  const okBtn = document.getElementById('btn-ok-'+apartadoId);
+  const badBtn = document.getElementById('btn-bad-'+apartadoId);
+  if (okBtn) okBtn.classList.toggle('sel', newVal===true);
+  if (badBtn) badBtn.classList.toggle('sel', newVal===false);
+  const summary = document.getElementById('modal-summary-body');
+  if (summary) summary.innerHTML = renderSummaryInner(u);
+  renderUnits();
+
+  try {
+    await db.collection('ste_checklist').doc(key).set({
+      unidadId: u.id, apartadoId, cumple: newVal,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, {merge:true});
+  } catch(e) {
+    showToast('Error guardando: '+e.message, 'error');
+  }
+}
+
+// ─── EVIDENCIA: 5 fotos por unidad (base64 en Firestore), con opción cámara o galería ─
+function toBase64Compressed(file, maxDim=900, quality=0.65) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        let {width, height} = img;
+        if (width > height) { if (width > maxDim) { height = height*maxDim/width; width = maxDim; } }
+        else { if (height > maxDim) { width = width*maxDim/height; height = maxDim; } }
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = () => reject(new Error('Imagen inválida'));
+      img.src = e.target.result;
+    };
+    reader.onerror = () => reject(new Error('No se pudo leer el archivo'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function renderUnitPhotosSection(u) {
+  const slots = [1,2,3,4,5].map(i => `<span id="photo-slot-${i}">${renderPhotoSlotInner((u.fotos&&u.fotos[i])||null, i)}</span>`).join('');
+  return `<div class="unit-photos-block">
+    <div class="cat-title">Evidencia fotográfica</div>
+    <div class="unit-photos">${slots}</div>
+  </div>`;
+}
+
+function renderPhotoSlotInner(url, i) {
+  if (url) {
+    return `<div class="photo-slot slot-filled" style="background-image:url('${escAttr(url)}')" onclick="openPhotoMenu(event,${i})" title="Foto ${i} · opciones"></div>`;
+  }
+  return `<div class="photo-slot slot-empty" onclick="openPhotoMenu(event,${i})" title="Agregar foto ${i}">Foto ${i}<span>＋</span></div>`;
+}
+
+let photoMenuCtx = null; // {slotIndex}
+
+function openPhotoMenu(e, slotIndex) {
+  e.stopPropagation();
+  photoMenuCtx = {slotIndex};
+  const u = unidades.find(x => x.id === currentUnitId);
+  const hasImage = !!(u && u.fotos && u.fotos[slotIndex]);
+  const menu = document.getElementById('photo-menu');
+  menu.innerHTML = hasImage
+    ? `<button onclick="photoMenuView()">👁 Ver</button>
+       <button onclick="renderPhotoUploadChoice()">✏️ Cambiar</button>
+       <button class="danger" onclick="photoMenuDelete()">🗑 Borrar</button>`
+    : `<button onclick="photoMenuPick('gallery')">📁 Elegir de galería</button>
+       <button onclick="photoMenuPick('camera')">📷 Tomar foto</button>`;
+  const rect = e.currentTarget.getBoundingClientRect();
+  menu.style.top = Math.min(rect.bottom + 4, window.innerHeight - 150) + 'px';
+  menu.style.left = Math.min(rect.left, window.innerWidth - 180) + 'px';
+  menu.classList.add('open');
+}
+function closePhotoMenu() { document.getElementById('photo-menu').classList.remove('open'); photoMenuCtx = null; }
+document.addEventListener('click', (e) => {
+  const menu = document.getElementById('photo-menu');
+  if (menu.classList.contains('open') && !menu.contains(e.target)) closePhotoMenu();
+});
+
+function renderPhotoUploadChoice() {
+  const menu = document.getElementById('photo-menu');
+  menu.innerHTML = `<button onclick="photoMenuPick('gallery')">📁 Elegir de galería</button>
+    <button onclick="photoMenuPick('camera')">📷 Tomar foto</button>`;
+}
+
+function photoMenuPick(mode) {
+  if (!photoMenuCtx) return;
+  const {slotIndex} = photoMenuCtx;
+  closePhotoMenu();
+  const input = document.getElementById('global-file-input');
+  if (mode === 'camera') input.setAttribute('capture', 'environment'); else input.removeAttribute('capture');
+  input.onchange = (ev) => uploadUnitPhoto(ev, slotIndex);
+  input.value = '';
+  input.click();
+}
+
+function photoMenuView() {
+  if (!photoMenuCtx || !currentUnitId) return;
+  const {slotIndex} = photoMenuCtx;
+  const u = unidades.find(x => x.id === currentUnitId);
+  const url = u && u.fotos && u.fotos[slotIndex];
+  closePhotoMenu();
+  if (url) openFullscreenUrl(url);
+}
+
+async function photoMenuDelete() {
+  if (!photoMenuCtx || !currentUnitId) return;
+  const {slotIndex} = photoMenuCtx;
+  closePhotoMenu();
+  if (!confirm('¿Eliminar esta foto?')) return;
+  const u = unidades.find(x => x.id === currentUnitId); if (!u) return;
+  if (!u.fotos) u.fotos = {};
+  u.fotos[slotIndex] = null;
+  const holder = document.getElementById('photo-slot-'+slotIndex);
+  if (holder) holder.innerHTML = renderPhotoSlotInner(null, slotIndex);
+  renderUnits();
+  try {
+    await db.collection('ste_unidad_fotos').doc(u.id).set({
+      [`foto${slotIndex}`]: firebase.firestore.FieldValue.delete(),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, {merge:true});
+    showToast('Foto eliminada', 'success');
+  } catch(e) { showToast('Error: '+e.message, 'error'); }
+}
+
+async function uploadUnitPhoto(e, slotIndex) {
+  const file = e.target.files[0];
+  document.getElementById('global-file-input').removeAttribute('capture');
+  if (!file) return;
+  const u = unidades.find(x => x.id === currentUnitId); if (!u) return;
+  const holder = document.getElementById('photo-slot-'+slotIndex);
+  if (holder) holder.innerHTML = '<div class="photo-slot slot-loading">…</div>';
+  try {
+    const b64 = await toBase64Compressed(file);
+    if (!u.fotos) u.fotos = {};
+    u.fotos[slotIndex] = b64;
+    if (holder) holder.innerHTML = renderPhotoSlotInner(b64, slotIndex);
+    renderUnits();
+    await db.collection('ste_unidad_fotos').doc(u.id).set({
+      unidadId: u.id, [`foto${slotIndex}`]: b64,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, {merge:true});
+    showToast('Foto guardada ✓', 'success');
+  } catch(err) {
+    showToast('Error subiendo imagen: '+err.message, 'error');
+    if (holder) holder.innerHTML = renderPhotoSlotInner((u.fotos||{})[slotIndex], slotIndex);
+  }
+  e.target.value = '';
+}
+
+function openFullscreenUrl(url) {
+  document.getElementById('img-fs-src').src = url;
+  document.getElementById('img-fs').classList.add('open');
+}
+function closeFullscreen() { document.getElementById('img-fs').classList.remove('open'); }
+
+// ─── VIEW SWITCH ──────────────────────────────────────────────────────────────
+function switchView(id) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.toggle('active', t.dataset.target===id));
+  if (id === 'view-avance') renderAvance();
+  if (id === 'view-edit') renderEditLists();
+}
+
+// ─── DONUT CHART (SVG) ────────────────────────────────────────────────────────
+function donutChart(segments, size=140, strokeWidth=18) {
+  const total = segments.reduce((s,x)=>s+x.value,0) || 1;
+  const radius = (size-strokeWidth)/2;
+  const circumference = 2*Math.PI*radius;
+  let offset = 0;
+  const circles = segments.filter(s=>s.value>0).map(seg => {
+    const frac = seg.value/total;
+    const dash = frac*circumference;
+    const el = `<circle cx="${size/2}" cy="${size/2}" r="${radius}" fill="none" stroke="${seg.color}" stroke-width="${strokeWidth}" stroke-dasharray="${dash} ${circumference-dash}" stroke-dashoffset="${-offset}" transform="rotate(-90 ${size/2} ${size/2})" stroke-linecap="butt"/>`;
+    offset += dash;
+    return el;
+  }).join('');
+  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+    <circle cx="${size/2}" cy="${size/2}" r="${radius}" fill="none" stroke="${COLOR_PEND}" stroke-width="${strokeWidth}"/>
+    ${circles}
+  </svg>`;
+}
+
+// ─── AVANCE VIEW ──────────────────────────────────────────────────────────────
+function renderAvanceFilterBar() {
+  const opts = ['todas', ...PLANTAS];
+  return opts.map(p => {
+    const label = p==='todas' ? 'Todas' : p;
+    return `<button class="plant-btn${avancePlantFilter===p?' active':''}" onclick="setAvanceFilter('${escAttr(p)}')">${escHtml(label)}</button>`;
+  }).join('');
+}
+function setAvanceFilter(p) { avancePlantFilter = p; renderAvance(); }
+
+function computeCatRows(units) {
+  const catNames = [...new Set(apartados.map(a=>a.categoria))];
+  return catNames.map(cat => {
+    const aps = apartados.filter(a=>a.categoria===cat);
+    let rev=0, cum=0;
+    units.forEach(u => aps.forEach(a => {
+      const c = getItem(u.id, a.id);
+      if (c.cumple===true||c.cumple===false) rev++;
+      if (c.cumple===true) cum++;
+    }));
+    const tot = units.length*aps.length;
+    return { label:cat, pctA: tot?Math.round(rev/tot*100):0, pctC: rev?Math.round(cum/rev*100):0 };
+  });
+}
+
+function computeDistribucion(units) {
+  const totalAp = apartados.length;
+  let cumple=0, noCumple=0;
+  units.forEach(u => apartados.forEach(a => {
+    const c = getItem(u.id, a.id);
+    if (c.cumple===true) cumple++;
+    else if (c.cumple===false) noCumple++;
+  }));
+  const totalPosible = units.length*totalAp;
+  const pendiente = Math.max(totalPosible-cumple-noCumple, 0);
+  return { cumple, noCumple, pendiente, totalPosible };
+}
+
+function renderDistribucionPanel(units) {
+  const d = computeDistribucion(units);
+  const segments = [
+    {value:d.cumple, color:COLOR_OK, label:'Cumple'},
+    {value:d.noCumple, color:COLOR_BAD, label:'No cumple'},
+    {value:d.pendiente, color:COLOR_PEND, label:'Pendiente'}
+  ];
+  return `<div class="avance-panel">
+    <div class="panel-title">Distribución de puntos</div>
+    <div class="donut-wrap">
+      ${donutChart(segments)}
+      <div class="donut-legend">
+        ${segments.map(s=>`<div class="legend-row"><span class="legend-dot" style="background:${s.color}"></span>${s.label} <b>${s.value}</b> <span class="legend-pct">(${d.totalPosible?Math.round(s.value/d.totalPosible*100):0}%)</span></div>`).join('')}
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderMiniDonutCard(label, units) {
+  const d = computeDistribucion(units);
+  const revisado = d.cumple+d.noCumple;
+  const pctCumple = revisado ? Math.round(d.cumple/revisado*100) : 0;
+  const segments = [
+    {value:d.cumple, color:COLOR_OK},
+    {value:d.noCumple, color:COLOR_BAD},
+    {value:d.pendiente, color:COLOR_PEND}
+  ];
+  return `<div class="mini-donut-card">
+    ${donutChart(segments, 72, 10)}
+    <div class="mini-donut-label">${escHtml(label)}</div>
+    <div class="mini-donut-pct">${revisado ? pctCumple+'% cumple' : 'Sin datos'}</div>
+  </div>`;
+}
+
+function renderGanttPanel(units) {
+  const withDate = units.filter(u=>u.fechaAtencion).map(u=>({...u, d:new Date(u.fechaAtencion+'T00:00:00')})).filter(u=>!isNaN(u.d));
+  if (!withDate.length) {
+    return `<div class="avance-panel" style="margin-top:20px;">
+      <div class="panel-title">Gantt de atención</div>
+      <div class="empty-mini">Aún no hay fechas de atención registradas. Agrégalas desde "Editar" o dentro de cada unidad.</div>
+    </div>`;
+  }
+  withDate.sort((a,b)=>a.d-b.d);
+  let rawMin = withDate[0].d, rawMax = withDate[withDate.length-1].d;
+  if (rawMin.getTime() === rawMax.getTime()) { rawMin = new Date(rawMin.getTime()-86400000); rawMax = new Date(rawMax.getTime()+86400000); }
+  const pad = Math.max((rawMax-rawMin)*0.08, 86400000);
+  const minD = new Date(rawMin.getTime()-pad), maxD = new Date(rawMax.getTime()+pad);
+  const span = maxD - minD;
+  const fmt = d => d.toLocaleDateString('es-MX', {day:'2-digit', month:'short'});
+  const todayPct = Math.min(100, Math.max(0, ((new Date()-minD)/span*100)));
+
+  const tickCount = 5;
+  const ticks = [];
+  for (let i=0;i<=tickCount;i++) {
+    const t = new Date(minD.getTime() + span*i/tickCount);
+    ticks.push({pct: i/tickCount*100, label: fmt(t)});
+  }
+  const axisTicks = ticks.map(t=>`<span class="gantt-axis-tick" style="left:${t.pct}%">${t.label}</span>`).join('');
+  const gridlines = ticks.map(t=>`<div class="gantt-gridline" style="left:${t.pct}%"></div>`).join('');
+
+  const rows = withDate.map(u => {
+    const pct = span ? ((u.d-minD)/span*100) : 50;
+    return `<div class="gantt-row">
+      <div class="gantt-label">🚌 ${escHtml(u.numero)}<span class="g-planta">${escHtml(u.planta)}</span></div>
+      <div class="gantt-track">
+        ${gridlines}
+        <div class="gantt-today" style="left:${todayPct}%" title="Hoy"></div>
+        <div class="gantt-marker" style="left:${pct}%" title="${escAttr(u.numero)} · ${escAttr(u.fechaAtencion)}" onclick="jumpToUnit('${escAttr(u.planta)}','${u.id}')"></div>
+      </div>
+      <div class="gantt-date">${fmt(u.d)}</div>
+    </div>`;
+  }).join('');
+  return `<div class="avance-panel" style="margin-top:20px;">
+    <div class="panel-title">Gantt de atención</div>
+    <div class="gantt-axis-row">
+      <div class="gantt-axis-spacer"></div>
+      <div class="gantt-axis">${axisTicks}</div>
+      <div class="gantt-axis-spacer-right"></div>
+    </div>
+    <div class="gantt-rows">${rows}</div>
+  </div>`;
+}
+
+function barRow(r) {
+  return `<div class="bar-row">
+    <div class="bar-label">${escHtml(r.label)}</div>
+    <div class="bar-track"><div class="bar-fill" style="width:${r.pctA}%"></div></div>
+    <div class="bar-vals"><span>${r.pctA}% avance</span><span style="color:${r.pctC>=80?'var(--green)':r.pctC>=50?'var(--amber)':'var(--red)'}">${r.pctC}% cumple</span></div>
+  </div>`;
+}
+
+function renderAvance() {
+  const el = document.getElementById('view-avance');
+  if (!unidades.length || !apartados.length) { el.innerHTML = '<div class="loading"><div class="spinner"></div></div>'; return; }
+
+  const scopedUnits = avancePlantFilter==='todas' ? unidades : unidades.filter(u=>u.planta===avancePlantFilter);
+  const totalAp = apartados.length;
+  const totalPosible = scopedUnits.length*totalAp;
+  let totalRevisado = 0, totalCumple = 0, completas = 0;
+  scopedUnits.forEach(u => { const s = unitStats(u); totalRevisado += s.revisado; totalCumple += s.cumple; if (s.pctRevisado===100) completas++; });
+  const pctAvanceGlobal = totalPosible ? Math.round(totalRevisado/totalPosible*100) : 0;
+  const pctCumpleGlobal = totalRevisado ? Math.round(totalCumple/totalRevisado*100) : 0;
+
+  const catRows = computeCatRows(scopedUnits);
+  const ranking = scopedUnits.map(u=>({u, s:unitStats(u)})).sort((a,b)=>a.s.pctRevisado-b.s.pctRevisado).slice(0,12);
+
+  let secondRowHtml = '';
+  if (avancePlantFilter === 'todas') {
+    const plantaRows = PLANTAS.map(p => {
+      const us = unidades.filter(u => u.planta===p);
+      let rev=0, cum=0; const tot = us.length*totalAp;
+      us.forEach(u => { const s=unitStats(u); rev+=s.revisado; cum+=s.cumple; });
+      return { label:`${p} (${us.length})`, pctA: tot?Math.round(rev/tot*100):0, pctC: rev?Math.round(cum/rev*100):0 };
+    });
+    const miniDonuts = PLANTAS.map(p => renderMiniDonutCard(p, unidades.filter(u=>u.planta===p))).join('');
+    secondRowHtml = `
+      <div class="avance-grid" style="margin-top:20px;">
+        <div class="avance-panel">
+          <div class="panel-title">Avance y cumplimiento por planta</div>
+          ${plantaRows.map(barRow).join('')}
+        </div>
+        <div class="avance-panel">
+          <div class="panel-title">Cumplimiento por planta</div>
+          <div class="mini-donuts-grid">${miniDonuts}</div>
+        </div>
+      </div>`;
+  }
+
+  el.innerHTML = `
+    <div class="section-title">Avance General</div>
+    <div class="section-sub">Progreso de inspección — ${avancePlantFilter==='todas' ? 'todas las plantas' : escHtml(avancePlantFilter)} (${scopedUnits.length} unidades)</div>
+    <div class="plant-bar" style="margin-bottom:24px;">${renderAvanceFilterBar()}</div>
+    <div class="stat-cards">
+      <div class="stat-card"><div class="stat-value">${pctAvanceGlobal}%</div><div class="stat-label">Avance</div></div>
+      <div class="stat-card"><div class="stat-value" style="color:${pctCumpleGlobal>=80?'var(--green)':pctCumpleGlobal>=50?'var(--amber)':'var(--red)'}">${pctCumpleGlobal}%</div><div class="stat-label">Cumplimiento</div></div>
+      <div class="stat-card"><div class="stat-value">${completas}/${scopedUnits.length}</div><div class="stat-label">Unidades completas</div></div>
+      <div class="stat-card"><div class="stat-value">${totalRevisado}/${totalPosible}</div><div class="stat-label">Puntos revisados</div></div>
+    </div>
+    <div class="avance-grid">
+      ${renderDistribucionPanel(scopedUnits)}
+      <div class="avance-panel">
+        <div class="panel-title">Cumplimiento por categoría</div>
+        ${catRows.map(barRow).join('')}
+      </div>
+    </div>
+    ${secondRowHtml}
+    ${renderGanttPanel(scopedUnits)}
+    <div class="avance-panel" style="margin-top:20px;">
+      <div class="panel-title">Unidades que requieren atención (menor avance)</div>
+      <div class="rank-list">
+        ${ranking.map(r=>`<div class="rank-row" onclick="jumpToUnit('${escAttr(r.u.planta)}','${r.u.id}')">
+          <div class="rank-unit">🚌 ${escHtml(r.u.numero)}<span class="rank-planta">${escHtml(r.u.planta)}</span></div>
+          <div class="rank-bar-track"><div class="rank-bar-fill" style="width:${r.s.pctRevisado}%"></div></div>
+          <div class="rank-pct">${r.s.pctRevisado}%</div>
+        </div>`).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function jumpToUnit(planta, unitId) {
+  selectedPlant = planta;
+  switchView('view-list');
+  renderPlantBar();
+  renderUnits();
+  openUnit(unitId);
+}
+
+// ─── EDIT VIEW ────────────────────────────────────────────────────────────────
+function renderEditPlantaSelect() {
+  document.getElementById('new-unidad-planta').innerHTML = PLANTAS.map(p=>`<option value="${escAttr(p)}">${escHtml(p)}</option>`).join('');
+}
+
+function renderEditLists() {
+  document.getElementById('edit-unit-count').textContent = unidades.length;
+  document.getElementById('edit-ap-count').textContent = apartados.length;
+  document.getElementById('cat-list').innerHTML = [...new Set(apartados.map(a=>a.categoria))].map(c=>`<option value="${escAttr(c)}">`).join('');
+
+  const sortedU = [...unidades].sort((a,b)=>Number(a.numero)-Number(b.numero));
+  document.getElementById('edit-unidades-list').innerHTML = sortedU.map(u => `
+    <div class="edit-item">
+      <span class="edit-item-name">🚌 ${escHtml(u.numero)}</span>
+      <select onchange="changeUnidadPlanta('${u.id}',this.value)">
+        ${PLANTAS.map(p=>`<option value="${escAttr(p)}" ${p===u.planta?'selected':''}>${escHtml(p)}</option>`).join('')}
+      </select>
+      <input type="date" value="${u.fechaAtencion||''}" onchange="changeFechaAtencion('${u.id}',this.value)" onclick="if(this.showPicker){try{this.showPicker();}catch(e){}}" title="Fecha de atención" style="max-width:150px;flex-shrink:0;padding:6px 8px;font-size:12px;">
+      <button class="btn-icon-del" onclick="deleteUnidad('${u.id}')" title="Eliminar unidad">🗑</button>
+    </div>`).join('') || '<div class="empty-mini">Sin unidades registradas</div>';
+
+  document.getElementById('edit-apartados-list').innerHTML = apartados.map(a => `
+    <div class="edit-item">
+      <span class="edit-item-cat">${escHtml(a.categoria)}</span>
+      <span class="edit-item-name">${escHtml(a.nombre)}</span>
+      <button class="btn-icon-del" onclick="deleteApartado('${a.id}')" title="Eliminar apartado">🗑</button>
+    </div>`).join('') || '<div class="empty-mini">Sin apartados registrados</div>';
+}
+
+async function addUnidad() {
+  const numInput = document.getElementById('new-unidad-num');
+  const num = numInput.value.trim();
+  const planta = document.getElementById('new-unidad-planta').value;
+  if (!num) { showToast('Ingresa un número de unidad', 'error'); return; }
+  if (unidades.some(u => u.id === num)) { showToast('Esa unidad ya existe', 'error'); return; }
+  try {
+    await db.collection('ste_unidades').doc(num).set({numero:num, planta});
+    unidades.push({id:num, numero:num, planta});
+    numInput.value = '';
+    renderEditLists(); renderPlantBar();
+    if (selectedPlant===planta) renderUnits();
+    showToast('Unidad agregada ✓', 'success');
+  } catch(e) { showToast('Error: '+e.message, 'error'); }
+}
+
+async function changeUnidadPlanta(id, planta) {
+  try {
+    await db.collection('ste_unidades').doc(id).update({planta});
+    const u = unidades.find(x=>x.id===id); if (u) u.planta = planta;
+    renderPlantBar(); renderUnits();
+    showToast('Planta actualizada ✓', 'success');
+  } catch(e) { showToast('Error: '+e.message, 'error'); }
+}
+
+async function deleteUnidad(id) {
+  if (!confirm('¿Eliminar esta unidad y todo su historial de inspección? No se puede deshacer.')) return;
+  try {
+    await db.collection('ste_unidades').doc(id).delete();
+    const orphans = await db.collection('ste_checklist').where('unidadId','==',id).get();
+    if (!orphans.empty) {
+      const batch = db.batch();
+      orphans.docs.forEach(d => batch.delete(d.ref));
+      await batch.commit();
+      orphans.docs.forEach(d => { delete checklistMap[d.id]; });
+    }
+    await db.collection('ste_unidad_fotos').doc(id).delete().catch(()=>{});
+    unidades = unidades.filter(u => u.id !== id);
+    renderEditLists(); renderPlantBar(); renderUnits();
+    showToast('Unidad eliminada', 'success');
+  } catch(e) { showToast('Error al eliminar', 'error'); }
+}
+
+async function addApartado() {
+  const catInput = document.getElementById('new-ap-cat');
+  const nomInput = document.getElementById('new-ap-nombre');
+  const categoria = catInput.value.trim();
+  const nombre = nomInput.value.trim();
+  if (!categoria || !nombre) { showToast('Categoría y nombre son requeridos', 'error'); return; }
+  try {
+    const orden = apartados.length;
+    const ref = await db.collection('ste_apartados').add({categoria, nombre, orden});
+    apartados.push({id:ref.id, categoria, nombre, orden});
+    nomInput.value = '';
+    renderEditLists();
+    showToast('Apartado agregado ✓', 'success');
+  } catch(e) { showToast('Error: '+e.message, 'error'); }
+}
+
+async function deleteApartado(id) {
+  if (!confirm('¿Eliminar este apartado de todas las unidades? No se puede deshacer.')) return;
+  try {
+    await db.collection('ste_apartados').doc(id).delete();
+    const orphans = await db.collection('ste_checklist').where('apartadoId','==',id).get();
+    if (!orphans.empty) {
+      const batch = db.batch();
+      orphans.docs.forEach(d => batch.delete(d.ref));
+      await batch.commit();
+      orphans.docs.forEach(d => { delete checklistMap[d.id]; });
+    }
+    apartados = apartados.filter(a => a.id !== id);
+    renderEditLists();
+    showToast('Apartado eliminado', 'success');
+  } catch(e) { showToast('Error al eliminar', 'error'); }
+}
+
+// ─── TOAST ────────────────────────────────────────────────────────────────────
+let toastTimer;
+function showToast(msg, type='success') {
+  const t = document.getElementById('toast');
+  t.textContent = (type==='success'?'✓ ':'✕ ')+msg;
+  t.className = `toast show ${type}`;
+  clearTimeout(toastTimer); toastTimer = setTimeout(()=>t.classList.remove('show'), 3500);
+}
+
+// ─── UTILS ────────────────────────────────────────────────────────────────────
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function escAttr(s) { return String(s).replace(/"/g,'&quot;'); }
+
+init();
+</script>
+</body>
+</html>
