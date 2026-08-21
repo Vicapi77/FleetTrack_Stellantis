@@ -265,6 +265,7 @@
   .rank-bar-track { flex:1; height:7px; border-radius:99px; background:var(--bg); border:1px solid var(--border); overflow:hidden; }
   .rank-bar-fill { height:100%; background:var(--amber); border-radius:99px; }
   .rank-pct { width:42px; text-align:right; font-size:12px; font-weight:700; color:var(--muted); flex-shrink:0; }
+  .rank-score { width:130px; text-align:right; font-size:11.5px; font-weight:700; flex-shrink:0; }
 
   /* EDIT VIEW */
   .edit-grid { display:grid; grid-template-columns:1fr 1fr; gap:22px; }
@@ -278,6 +279,8 @@
     background:var(--bg); border:1px solid transparent;
   }
   .edit-item:hover { border-color:var(--border); }
+  .edit-item-warn { background:rgba(248,113,113,.08); border-color:rgba(248,113,113,.35) !important; }
+  .warn-tag { font-size:10px; color:var(--red); font-weight:600; margin-left:4px; white-space:nowrap; }
   .edit-item-name { font-size:13px; flex:1; }
   .edit-item-cat {
     font-size:10px; text-transform:uppercase; letter-spacing:.5px; color:var(--teal);
@@ -348,8 +351,7 @@
     <div class="edit-panel">
       <div class="panel-title">Apartados <span class="badge-count" id="edit-ap-count">0</span></div>
       <div class="add-form">
-        <input id="new-ap-cat" type="text" placeholder="Categoría" list="cat-list" style="max-width:130px;">
-        <datalist id="cat-list"></datalist>
+        <select id="new-ap-cat" style="max-width:170px;"></select>
         <input id="new-ap-nombre" type="text" placeholder="Nombre del punto">
         <button class="btn btn-primary btn-sm" onclick="addApartado()">＋ Agregar</button>
       </div>
@@ -473,42 +475,130 @@ const SEED_UNIDADES = [
 ];
 
 const SEED_APARTADOS = [
-  {categoria:"Imagen", nombre:"Limpieza"},
-  {categoria:"Imagen", nombre:"Carroceria"},
-  {categoria:"Interior", nombre:"Celular Red"},
-  {categoria:"Interior", nombre:"Retrovisor"},
-  {categoria:"Interior", nombre:"Cinturones"},
-  {categoria:"Interior", nombre:"Asientos"},
-  {categoria:"Interior", nombre:"Escaleras"},
-  {categoria:"Interior", nombre:"Cortinas"},
-  {categoria:"Interior", nombre:"Señal."},
-  {categoria:"Interior", nombre:"Asientos Pref."},
-  {categoria:"Interior", nombre:"Botiquin"},
-  {categoria:"Interior", nombre:"Extintor"},
-  {categoria:"Interior", nombre:"Poliza"},
-  {categoria:"Documentos", nombre:"Tarj. Circ."},
-  {categoria:"Documentos", nombre:"Licencia"},
-  {categoria:"Documentos", nombre:"Placas"},
-  {categoria:"Exterior", nombre:"Faros de niebla"},
-  {categoria:"Exterior", nombre:"Espejos laterales"},
-  {categoria:"Exterior", nombre:"Espejos Banqueteros"},
-  {categoria:"Exterior", nombre:"Llantas y Birlos"},
-  {categoria:"Exterior", nombre:"Limpia parabrisas"},
-  {categoria:"Exterior", nombre:"Ventanas laterales"},
-  {categoria:"Exterior", nombre:"Ventana Puerta"},
-  {categoria:"Exterior", nombre:"Rotulacion"},
-  {categoria:"Exterior", nombre:"Luces externas"},
-  {categoria:"Exterior", nombre:"Luces internas"},
-  {categoria:"Exterior", nombre:"Luces Stop"},
-  {categoria:"Exterior", nombre:"Luces Reversa"},
-  {categoria:"Exterior", nombre:"Direccionales"},
-  {categoria:"Exterior", nombre:"Intermitentes"},
-  {categoria:"Exterior", nombre:"AC"},
-  {categoria:"Exterior", nombre:"Puerta"},
-  {categoria:"Exterior", nombre:"Asientos reclinables"},
-  {categoria:"Exterior", nombre:"Alarma reversa"},
-  {categoria:"Exterior", nombre:"Display"}
+  {categoria:"Seguridad", nombre:"Retrovisor"},
+  {categoria:"Seguridad", nombre:"Cinturones"},
+  {categoria:"Seguridad", nombre:"Escaleras"},
+  {categoria:"Seguridad", nombre:"Señal."},
+  {categoria:"Seguridad", nombre:"Faros de niebla"},
+  {categoria:"Seguridad", nombre:"Espejos laterales"},
+  {categoria:"Seguridad", nombre:"Espejos Banqueteros"},
+  {categoria:"Seguridad", nombre:"Limpia parabrisas"},
+  {categoria:"Seguridad", nombre:"Luces Stop"},
+  {categoria:"Seguridad", nombre:"Luces Reversa"},
+  {categoria:"Seguridad", nombre:"Direccionales"},
+  {categoria:"Seguridad", nombre:"Intermitentes"},
+  {categoria:"Seguridad", nombre:"Alarma reversa"},
+  {categoria:"Mecánica", nombre:"Puerta"},
+  {categoria:"Mecánica", nombre:"Asientos reclinables"},
+  {categoria:"Mecánica", nombre:"AC"},
+  {categoria:"Llantas", nombre:"Llantas y Birlos"},
+  {categoria:"Eléctrico", nombre:"Celular Red"},
+  {categoria:"Eléctrico", nombre:"Luces externas"},
+  {categoria:"Eléctrico", nombre:"Luces internas"},
+  {categoria:"Eléctrico", nombre:"Display"},
+  {categoria:"Equipo de seguridad", nombre:"Botiquin"},
+  {categoria:"Equipo de seguridad", nombre:"Extintor"},
+  {categoria:"limpieza y documentación", nombre:"Limpieza"},
+  {categoria:"limpieza y documentación", nombre:"Poliza"},
+  {categoria:"limpieza y documentación", nombre:"Tarj. Circ."},
+  {categoria:"limpieza y documentación", nombre:"Licencia"},
+  {categoria:"limpieza y documentación", nombre:"Placas"},
+  {categoria:"Confort y carrocería", nombre:"Carroceria"},
+  {categoria:"Confort y carrocería", nombre:"Asientos"},
+  {categoria:"Confort y carrocería", nombre:"Cortinas"},
+  {categoria:"Confort y carrocería", nombre:"Asientos Pref."},
+  {categoria:"Confort y carrocería", nombre:"Ventanas laterales"},
+  {categoria:"Confort y carrocería", nombre:"Ventana Puerta"},
+  {categoria:"Confort y carrocería", nombre:"Rotulacion"}
 ];
+
+// ─── Migración: nombre → nueva categoría / orden ───────────────────────────────
+// Incluye los 35 puntos originales MÁS los que ya se agregaron manualmente con las
+// categorías viejas (Interior/Exterior), para poder reasignarles una de las 7 categorías
+// nuevas automáticamente. Solo se usa para migrar — sembrar una base nueva sigue usando
+// únicamente SEED_APARTADOS.
+const ALL_KNOWN_APARTADOS = [
+  {categoria:"Seguridad", nombre:"Retrovisor"},
+  {categoria:"Seguridad", nombre:"Cinturones"},
+  {categoria:"Seguridad", nombre:"Escaleras"},
+  {categoria:"Seguridad", nombre:"Señal."},
+  {categoria:"Seguridad", nombre:"Faros de niebla"},
+  {categoria:"Seguridad", nombre:"Espejos laterales"},
+  {categoria:"Seguridad", nombre:"Espejos Banqueteros"},
+  {categoria:"Seguridad", nombre:"Limpia parabrisas"},
+  {categoria:"Seguridad", nombre:"Luces Stop"},
+  {categoria:"Seguridad", nombre:"Luces Reversa"},
+  {categoria:"Seguridad", nombre:"Direccionales"},
+  {categoria:"Seguridad", nombre:"Intermitentes"},
+  {categoria:"Seguridad", nombre:"Alarma reversa"},
+  {categoria:"Seguridad", nombre:"Parabrisas"},
+  {categoria:"Mecánica", nombre:"Puerta"},
+  {categoria:"Mecánica", nombre:"Asientos reclinables"},
+  {categoria:"Mecánica", nombre:"AC"},
+  {categoria:"Mecánica", nombre:"Aire acondicionado"},
+  {categoria:"Mecánica", nombre:"Manijas de ventanillas"},
+  {categoria:"Llantas", nombre:"Llantas y Birlos"},
+  {categoria:"Eléctrico", nombre:"Celular Red"},
+  {categoria:"Eléctrico", nombre:"Luces externas"},
+  {categoria:"Eléctrico", nombre:"Luces internas"},
+  {categoria:"Eléctrico", nombre:"Display"},
+  {categoria:"Equipo de seguridad", nombre:"Botiquin"},
+  {categoria:"Equipo de seguridad", nombre:"Extintor"},
+  {categoria:"limpieza y documentación", nombre:"Limpieza"},
+  {categoria:"limpieza y documentación", nombre:"Poliza"},
+  {categoria:"limpieza y documentación", nombre:"Tarj. Circ."},
+  {categoria:"limpieza y documentación", nombre:"Licencia"},
+  {categoria:"limpieza y documentación", nombre:"Placas"},
+  {categoria:"limpieza y documentación", nombre:"Piso"},
+  {categoria:"Confort y carrocería", nombre:"Carroceria"},
+  {categoria:"Confort y carrocería", nombre:"Asientos"},
+  {categoria:"Confort y carrocería", nombre:"Cortinas"},
+  {categoria:"Confort y carrocería", nombre:"Asientos Pref."},
+  {categoria:"Confort y carrocería", nombre:"Ventanas laterales"},
+  {categoria:"Confort y carrocería", nombre:"Ventana Puerta"},
+  {categoria:"Confort y carrocería", nombre:"Rotulacion"},
+  {categoria:"Confort y carrocería", nombre:"Descansabrazos"},
+  {categoria:"Confort y carrocería", nombre:"Respaldos de asientos"},
+  {categoria:"Confort y carrocería", nombre:"Base de asientos"},
+  {categoria:"Confort y carrocería", nombre:"Daños en costados"},
+  {categoria:"Confort y carrocería", nombre:"Defensas dañadas"}
+];
+const NOMBRE_TO_CATEGORIA = {};
+const ORDEN_BY_NOMBRE = {};
+ALL_KNOWN_APARTADOS.forEach((a,i) => { NOMBRE_TO_CATEGORIA[a.nombre] = a.categoria; ORDEN_BY_NOMBRE[a.nombre] = i; });
+
+// ─── Ponderación por categoría (debe sumar 100) ────────────────────────────────
+const CATEGORY_ORDER = ["Seguridad","Mecánica","Llantas","Eléctrico","Equipo de seguridad","limpieza y documentación","Confort y carrocería"];
+const CATEGORY_WEIGHTS = {
+  "Seguridad": 35, "Mecánica": 20, "Llantas": 15, "Eléctrico": 10,
+  "Equipo de seguridad": 10, "limpieza y documentación": 5, "Confort y carrocería": 5
+};
+
+function computeUnitScore(u) {
+  let score = 0;
+  CATEGORY_ORDER.forEach(cat => {
+    const weight = CATEGORY_WEIGHTS[cat] || 0;
+    const items = apartados.filter(a => a.categoria === cat);
+    if (!items.length) return;
+    const hasFail = items.some(a => getItem(u.id, a.id).cumple === false);
+    if (!hasFail) score += weight;
+  });
+  return score;
+}
+
+function classifyScore(score) {
+  if (score >= 95) return {label:'Excelente',   color:'#22c55e', range:'95-100'};
+  if (score >= 90) return {label:'Aceptable',   color:'#84cc16', range:'90-94'};
+  if (score >= 80) return {label:'Condicionada',color:'#f0a500', range:'80-89'};
+  if (score >= 70) return {label:'Deficiente',  color:'#f97316', range:'70-79'};
+  return                 {label:'Crítico',      color:'#f87171', range:'<70'};
+}
+
+function catLabel(cat) {
+  const w = CATEGORY_WEIGHTS[cat];
+  return w !== undefined ? `${cat} (${w}%)` : cat;
+}
+
 
 // ─── STATE ────────────────────────────────────────────────────────────────────
 let unidades  = [];
@@ -541,15 +631,30 @@ async function ensureSeed() {
     });
     await batch.commit();
   }
-  const aSnap = await db.collection('ste_apartados').limit(1).get();
+  const aSnap = await db.collection('ste_apartados').get();
   if (aSnap.empty) {
     const batch2 = db.batch();
     SEED_APARTADOS.forEach((a,i) => {
       batch2.set(db.collection('ste_apartados').doc(), {categoria:a.categoria, nombre:a.nombre, orden:i});
     });
     await batch2.commit();
+  } else {
+    // Migra apartados ya sembrados con el esquema de categorías anterior al nuevo esquema de 7 categorías.
+    const batch3 = db.batch();
+    let changed = false;
+    aSnap.docs.forEach(d => {
+      const data = d.data();
+      const newCat = NOMBRE_TO_CATEGORIA[data.nombre];
+      const newOrden = ORDEN_BY_NOMBRE[data.nombre];
+      const updates = {};
+      if (newCat !== undefined && data.categoria !== newCat) updates.categoria = newCat;
+      if (newOrden !== undefined && data.orden !== newOrden) updates.orden = newOrden;
+      if (Object.keys(updates).length) { batch3.update(d.ref, updates); changed = true; }
+    });
+    if (changed) await batch3.commit();
   }
 }
+
 
 async function loadAll() {
   const [uSnap, aSnap, cSnap, fSnap] = await Promise.all([
@@ -616,7 +721,8 @@ function renderUnitCard(u) {
   const s = unitStats(u);
   const okPct  = s.total ? s.cumple/s.total*100 : 0;
   const badPct = s.total ? (s.revisado-s.cumple)/s.total*100 : 0;
-  const cumpleColor = !s.revisado ? 'var(--muted)' : s.pctCumple>=80 ? 'var(--green)' : s.pctCumple>=50 ? 'var(--amber)' : 'var(--red)';
+  const score = computeUnitScore(u);
+  const tier = classifyScore(score);
   return `<div class="unit-card" onclick="openUnit('${u.id}')">
     <div class="unit-header">
       <div class="unit-name">🚌 ${escHtml(u.numero)}</div>
@@ -629,7 +735,7 @@ function renderUnitCard(u) {
       </div>
       <div class="unit-meta">
         <span>${s.pctRevisado}% revisado</span>
-        <span style="color:${cumpleColor};font-weight:600;">${s.revisado ? s.pctCumple+'% cumple' : 'Sin revisar'}</span>
+        <span style="color:${s.revisado?tier.color:'var(--muted)'};font-weight:600;">${s.revisado ? score+' · '+tier.label : 'Sin revisar'}</span>
       </div>
     </div>
   </div>`;
@@ -664,7 +770,7 @@ function renderUnitModal() {
   const groups = groupApartados();
   const groupsHtml = groups.map(g => `
     <div class="cat-group">
-      <div class="cat-title">${escHtml(g.categoria)}</div>
+      <div class="cat-title">${escHtml(catLabel(g.categoria))}</div>
       ${g.items.map(a => renderCheckRow(u,a)).join('')}
     </div>`).join('');
   document.getElementById('modal-body').innerHTML = `
@@ -676,10 +782,11 @@ function renderUnitModal() {
 
 function renderSummaryInner(u) {
   const s = unitStats(u);
-  const cumpleColor = !s.revisado ? 'var(--muted)' : s.pctCumple>=80 ? 'var(--green)' : s.pctCumple>=50 ? 'var(--amber)' : 'var(--red)';
+  const score = computeUnitScore(u);
+  const tier = classifyScore(score);
   return `
     <div class="detail-row"><div class="detail-label">Avance</div><div class="detail-val">${s.revisado}/${s.total} puntos (${s.pctRevisado}%)</div></div>
-    <div class="detail-row"><div class="detail-label">Cumplimiento</div><div class="detail-val" style="color:${cumpleColor}">${s.revisado ? s.pctCumple+'% ('+s.cumple+'/'+s.revisado+')' : 'Sin revisar aún'}</div></div>
+    <div class="detail-row"><div class="detail-label">Calificación</div><div class="detail-val" style="color:${s.revisado?tier.color:'var(--muted)'}">${s.revisado ? score+' · '+tier.label : 'Sin revisar aún'}</div></div>
     <div class="detail-row"><div class="detail-label">Fecha atención</div><div class="detail-val"><input type="date" value="${u.fechaAtencion||''}" onchange="changeFechaAtencion('${u.id}',this.value)" onclick="if(this.showPicker){try{this.showPicker();}catch(e){}}" style="padding:6px 10px;font-size:12px;"></div></div>
   `;
 }
@@ -914,7 +1021,8 @@ function renderAvanceFilterBar() {
 function setAvanceFilter(p) { avancePlantFilter = p; renderAvance(); }
 
 function computeCatRows(units) {
-  const catNames = [...new Set(apartados.map(a=>a.categoria))];
+  const catNames = [...new Set(apartados.map(a=>a.categoria))]
+    .sort((a,b) => CATEGORY_ORDER.indexOf(a) - CATEGORY_ORDER.indexOf(b));
   return catNames.map(cat => {
     const aps = apartados.filter(a=>a.categoria===cat);
     let rev=0, cum=0;
@@ -924,7 +1032,7 @@ function computeCatRows(units) {
       if (c.cumple===true) cum++;
     }));
     const tot = units.length*aps.length;
-    return { label:cat, pctA: tot?Math.round(rev/tot*100):0, pctC: rev?Math.round(cum/rev*100):0 };
+    return { label:catLabel(cat), pctA: tot?Math.round(rev/tot*100):0, pctC: rev?Math.round(cum/rev*100):0 };
   });
 }
 
@@ -1044,8 +1152,12 @@ function renderAvance() {
   const pctAvanceGlobal = totalPosible ? Math.round(totalRevisado/totalPosible*100) : 0;
   const pctCumpleGlobal = totalRevisado ? Math.round(totalCumple/totalRevisado*100) : 0;
 
+  const scored = scopedUnits.map(u => ({u, score: computeUnitScore(u)}));
+  const avgScore = scored.length ? Math.round(scored.reduce((s,x)=>s+x.score,0)/scored.length) : 0;
+  const avgTier = classifyScore(avgScore);
+
   const catRows = computeCatRows(scopedUnits);
-  const ranking = scopedUnits.map(u=>({u, s:unitStats(u)})).sort((a,b)=>a.s.pctRevisado-b.s.pctRevisado).slice(0,12);
+  const ranking = scopedUnits.map(u=>({u, s:unitStats(u), score:computeUnitScore(u)})).sort((a,b)=>a.s.pctRevisado-b.s.pctRevisado).slice(0,12);
 
   let secondRowHtml = '';
   if (avancePlantFilter === 'todas') {
@@ -1078,6 +1190,7 @@ function renderAvance() {
       <div class="stat-card"><div class="stat-value" style="color:${pctCumpleGlobal>=80?'var(--green)':pctCumpleGlobal>=50?'var(--amber)':'var(--red)'}">${pctCumpleGlobal}%</div><div class="stat-label">Cumplimiento</div></div>
       <div class="stat-card"><div class="stat-value">${completas}/${scopedUnits.length}</div><div class="stat-label">Unidades completas</div></div>
       <div class="stat-card"><div class="stat-value">${totalRevisado}/${totalPosible}</div><div class="stat-label">Puntos revisados</div></div>
+      <div class="stat-card"><div class="stat-value" style="color:${avgTier.color}">${avgScore}</div><div class="stat-label">Calificación (${avgTier.label})</div></div>
     </div>
     <div class="avance-grid">
       ${renderDistribucionPanel(scopedUnits)}
@@ -1086,19 +1199,45 @@ function renderAvance() {
         ${catRows.map(barRow).join('')}
       </div>
     </div>
+    <div class="avance-panel" style="margin-top:20px;">
+      ${renderClasificacionPanel(scored)}
+    </div>
     ${secondRowHtml}
     ${renderGanttPanel(scopedUnits)}
     <div class="avance-panel" style="margin-top:20px;">
       <div class="panel-title">Unidades que requieren atención (menor avance)</div>
       <div class="rank-list">
-        ${ranking.map(r=>`<div class="rank-row" onclick="jumpToUnit('${escAttr(r.u.planta)}','${r.u.id}')">
+        ${ranking.map(r=>{ const tier = classifyScore(r.score); return `<div class="rank-row" onclick="jumpToUnit('${escAttr(r.u.planta)}','${r.u.id}')">
           <div class="rank-unit">🚌 ${escHtml(r.u.numero)}<span class="rank-planta">${escHtml(r.u.planta)}</span></div>
           <div class="rank-bar-track"><div class="rank-bar-fill" style="width:${r.s.pctRevisado}%"></div></div>
           <div class="rank-pct">${r.s.pctRevisado}%</div>
-        </div>`).join('')}
+          <div class="rank-score" style="color:${tier.color}">${r.score} · ${tier.label}</div>
+        </div>`; }).join('')}
       </div>
     </div>
   `;
+}
+
+function renderClasificacionPanel(scored) {
+  const tiers = [
+    {label:'Excelente', range:'95-100', color:'#22c55e'},
+    {label:'Aceptable', range:'90-94', color:'#84cc16'},
+    {label:'Condicionada', range:'80-89', color:'#f0a500'},
+    {label:'Deficiente', range:'70-79', color:'#f97316'},
+    {label:'Crítico', range:'<70', color:'#f87171'}
+  ];
+  const total = scored.length || 1;
+  const counts = {}; tiers.forEach(t => counts[t.label]=0);
+  scored.forEach(x => { counts[classifyScore(x.score).label]++; });
+  const rows = tiers.map(t => {
+    const n = counts[t.label]; const pct = Math.round(n/total*100);
+    return `<div class="bar-row">
+      <div class="bar-label">${escHtml(t.label)} <span style="color:var(--muted);">(${t.range})</span></div>
+      <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${t.color};"></div></div>
+      <div class="bar-vals"><span>${n} unidad${n===1?'':'es'}</span><span>${pct}%</span></div>
+    </div>`;
+  }).join('');
+  return `<div class="panel-title">Clasificación por calificación ponderada</div>${rows}`;
 }
 
 function jumpToUnit(planta, unitId) {
@@ -1117,7 +1256,7 @@ function renderEditPlantaSelect() {
 function renderEditLists() {
   document.getElementById('edit-unit-count').textContent = unidades.length;
   document.getElementById('edit-ap-count').textContent = apartados.length;
-  document.getElementById('cat-list').innerHTML = [...new Set(apartados.map(a=>a.categoria))].map(c=>`<option value="${escAttr(c)}">`).join('');
+  document.getElementById('new-ap-cat').innerHTML = CATEGORY_ORDER.map(c=>`<option value="${escAttr(c)}">${escHtml(catLabel(c))}</option>`).join('');
 
   const sortedU = [...unidades].sort((a,b)=>Number(a.numero)-Number(b.numero));
   document.getElementById('edit-unidades-list').innerHTML = sortedU.map(u => `
@@ -1130,12 +1269,31 @@ function renderEditLists() {
       <button class="btn-icon-del" onclick="deleteUnidad('${u.id}')" title="Eliminar unidad">🗑</button>
     </div>`).join('') || '<div class="empty-mini">Sin unidades registradas</div>';
 
-  document.getElementById('edit-apartados-list').innerHTML = apartados.map(a => `
-    <div class="edit-item">
-      <span class="edit-item-cat">${escHtml(a.categoria)}</span>
-      <span class="edit-item-name">${escHtml(a.nombre)}</span>
+  const sortedA = [...apartados].sort((a,b) => {
+    const aOk = CATEGORY_ORDER.includes(a.categoria), bOk = CATEGORY_ORDER.includes(b.categoria);
+    if (aOk !== bOk) return aOk ? 1 : -1;
+    return (a.orden||0) - (b.orden||0);
+  });
+  document.getElementById('edit-apartados-list').innerHTML = sortedA.map(a => {
+    const isKnownCat = CATEGORY_ORDER.includes(a.categoria);
+    const opts = isKnownCat ? CATEGORY_ORDER : [a.categoria, ...CATEGORY_ORDER];
+    return `<div class="edit-item${isKnownCat?'':' edit-item-warn'}">
+      <select onchange="changeApartadoCategoria('${a.id}',this.value)" style="max-width:170px;flex-shrink:0;" title="Categoría">
+        ${opts.map(c=>`<option value="${escAttr(c)}" ${c===a.categoria?'selected':''}>${escHtml(catLabel(c))}</option>`).join('')}
+      </select>
+      <span class="edit-item-name">${escHtml(a.nombre)}${isKnownCat?'':' <span class="warn-tag">⚠ categoría anterior, elige una nueva</span>'}</span>
       <button class="btn-icon-del" onclick="deleteApartado('${a.id}')" title="Eliminar apartado">🗑</button>
-    </div>`).join('') || '<div class="empty-mini">Sin apartados registrados</div>';
+    </div>`;
+  }).join('') || '<div class="empty-mini">Sin apartados registrados</div>';
+}
+
+async function changeApartadoCategoria(id, categoria) {
+  try {
+    await db.collection('ste_apartados').doc(id).update({categoria});
+    const a = apartados.find(x=>x.id===id); if (a) a.categoria = categoria;
+    renderEditLists();
+    showToast('Categoría actualizada ✓', 'success');
+  } catch(e) { showToast('Error: '+e.message, 'error'); }
 }
 
 async function addUnidad() {
