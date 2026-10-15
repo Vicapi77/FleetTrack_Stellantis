@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0c1710">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>FleetCheck Móvil · Stellantis</title>
+<style>
+  :root {
+    --bg:#060d07; --surface:#0c1710; --surface2:#132019; --border:#1c3022;
+    --accent:#34d058; --accent2:#a3e8b0; --amber:#f0a500; --teal:#2dd4bf;
+    --green:#22c55e; --red:#f87171; --text:#dff0e4; --muted:#5a7a62;
+    --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --nav-h:62px;
+    --safe-b: env(safe-area-inset-bottom, 0px);
+    --safe-t: env(safe-area-inset-top, 0px);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { background:var(--bg); color:var(--text); font-family:var(--font); }
+  body { min-height:100vh; padding-bottom:calc(var(--nav-h) + var(--safe-b)); overflow-x:hidden; }
+  button { font-family:inherit; cursor:pointer; }
+  input, select { font-family:inherit; }
+
+  /* HEADER */
+  header.top {
+    position:sticky; top:0; z-index:50; display:flex; align-items:center; justify-content:space-between; gap:10px;
+    padding:calc(10px + var(--safe-t)) 16px 10px; background:var(--surface); border-bottom:1px solid var(--border);
+  }
+  .logo { font-weight:800; font-size:17px; letter-spacing:-.3px; }
+  .logo span { color:var(--accent); }
+  .logo-sub { font-size:9.5px; color:var(--muted); letter-spacing:1.2px; text-transform:uppercase; }
+  .net { font-size:11px; font-weight:600; padding:5px 10px; border-radius:99px; border:1px solid var(--border); color:var(--muted); display:flex; align-items:center; gap:6px; white-space:nowrap; }
+  .net::before { content:''; width:7px; height:7px; border-radius:50%; background:currentColor; }
+  .net.online  { color:var(--green); border-color:rgba(34,197,94,.35); }
+  .net.offline { color:var(--red);   border-color:rgba(248,113,113,.35); }
+  .net.cache   { color:var(--amber); border-color:rgba(240,165,0,.35); }
+
+  /* VIEWS */
+  .view { display:none; padding:14px 16px 24px; }
+  .view.active { display:block; }
+  .h1 { font-size:20px; font-weight:800; margin-bottom:2px; }
+  .sub { font-size:12.5px; color:var(--muted); margin-bottom:14px; }
+
+  .chips { display:flex; gap:8px; overflow-x:auto; margin:0 -16px 12px; padding:0 16px 4px; scrollbar-width:none; }
+  .chips::-webkit-scrollbar { display:none; }
+  .chip { flex-shrink:0; padding:9px 14px; border-radius:99px; border:1.5px solid var(--border); background:transparent; color:var(--muted); font-size:13px; font-weight:600; white-space:nowrap; }
+  .chip.active { background:var(--accent); border-color:var(--accent); color:#040d06; }
+  .chip .n { opacity:.65; font-weight:500; }
+
+  .search { width:100%; background:var(--surface); border:1.5px solid var(--border); border-radius:12px; color:var(--text); font-size:16px; padding:11px 14px; outline:none; margin-bottom:14px; }
+  .search:focus { border-color:var(--accent); }
+
+  /* UNIT CARDS */
+  .units-grid { display:grid; grid-template-columns:repeat(2, 1fr); gap:10px; }
+  .ucard { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:12px; display:flex; flex-direction:column; gap:8px; text-align:left; color:var(--text); }
+  .ucard:active { border-color:var(--accent); background:var(--surface2); }
+  .ucard-top { display:flex; justify-content:space-between; align-items:center; gap:6px; }
+  .unum { font-size:17px; font-weight:800; }
+  .ubadge { background:var(--accent); color:#040d06; font-weight:700; font-size:11px; padding:2px 8px; border-radius:99px; }
+  .progress { display:flex; height:7px; border-radius:99px; overflow:hidden; background:var(--border); }
+  .progress .ok { background:var(--green); }
+  .progress .bad { background:var(--red); }
+  .ustat { font-size:12.5px; font-weight:700; }
+  .umeta { font-size:11px; color:var(--muted); }
+
+  /* STATES */
+  .state { text-align:center; padding:50px 20px; color:var(--muted); font-size:14px; }
+  .state .icon { font-size:42px; margin-bottom:10px; }
+  .spinner { width:34px; height:34px; border:3px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin .8s linear infinite; margin:0 auto 12px; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .btn { padding:12px 20px; border-radius:12px; border:none; font-size:15px; font-weight:700; }
+  .btn-primary { background:var(--accent); color:#040d06; }
+  .btn-ghost { background:var(--surface2); color:var(--text); border:1px solid var(--border); }
+  .state .btn { margin-top:16px; }
+  .notice { background:rgba(240,165,0,.08); border:1px solid rgba(240,165,0,.3); color:var(--amber); font-size:12.5px; border-radius:10px; padding:9px 12px; margin-bottom:12px; }
+
+  /* BOTTOM NAV */
+  nav.bottom {
+    position:fixed; left:0; right:0; bottom:0; z-index:60; display:flex;
+    height:calc(var(--nav-h) + var(--safe-b)); padding-bottom:var(--safe-b);
+    background:var(--surface); border-top:1px solid var(--border);
+  }
+  .tab { flex:1; background:transparent; border:none; color:var(--muted); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; font-size:11.5px; font-weight:600; }
+  .tab .ti { font-size:20px; line-height:1; }
+  .tab.active { color:var(--accent); }
+
+  /* SHEET (detalle de unidad) */
+  .sheet { position:fixed; inset:0; z-index:200; background:var(--bg); display:none; flex-direction:column; }
+  .sheet.open { display:flex; }
+  .sheet-head { display:flex; align-items:center; gap:8px; padding:calc(8px + var(--safe-t)) 10px 8px; background:var(--surface); border-bottom:1px solid var(--border); }
+  .icon-btn { min-width:44px; height:44px; border-radius:12px; border:1px solid var(--border); background:transparent; color:var(--text); font-size:18px; display:flex; align-items:center; justify-content:center; padding:0 10px; }
+  .icon-btn:active { background:var(--surface2); }
+  .sheet-title { flex:1; min-width:0; }
+  .sheet-title b { display:block; font-size:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .sheet-title small { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.6px; }
+  .sheet-body { flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:14px 16px calc(24px + var(--safe-b)); }
+
+  .summary { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px; }
+  .sbox { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:10px 12px; }
+  .sbox .l { font-size:10.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; font-weight:600; }
+  .sbox .v { font-size:16px; font-weight:800; margin-top:2px; }
+  .sbox.full { grid-column:1 / -1; display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .date-in { background:var(--bg); border:1.5px solid var(--border); border-radius:10px; color:var(--text); font-size:16px; padding:8px 10px; color-scheme:dark; }
+
+  .sec-title { font-size:11.5px; font-weight:800; color:var(--accent); text-transform:uppercase; letter-spacing:1px; margin:6px 0 8px; display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  .sec-title .cc { font-size:11px; font-weight:700; letter-spacing:0; text-transform:none; white-space:nowrap; }
+  .cc-ok { color:var(--green); } .cc-bad { color:var(--red); } .cc-n { color:var(--muted); }
+
+  .photos { display:flex; gap:8px; overflow-x:auto; padding-bottom:6px; margin-bottom:16px; scrollbar-width:none; }
+  .photos::-webkit-scrollbar { display:none; }
+  .pslot { flex-shrink:0; width:72px; height:72px; border-radius:12px; background-size:cover; background-position:center; display:flex; flex-direction:column; align-items:center; justify-content:center; font-size:10.5px; font-weight:600; }
+  .pslot.empty { border:1.5px dashed var(--border); color:var(--muted); }
+  .pslot.empty span { font-size:18px; line-height:1; }
+  .pslot.filled { border:1.5px solid var(--green); }
+  .pslot.loading { border:1.5px solid var(--border); color:var(--muted); }
+
+  .cat { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:6px 12px 4px; margin-bottom:12px; }
+  .cat .sec-title { margin:6px 0 2px; }
+  .crow { display:flex; align-items:center; gap:10px; padding:7px 0; border-bottom:1px solid rgba(28,48,34,.6); }
+  .crow:last-child { border-bottom:none; }
+  .cname { flex:1; font-size:14px; line-height:1.25; }
+  .cbtns { display:flex; gap:6px; flex-shrink:0; }
+  .cbtn { width:48px; height:40px; border-radius:10px; border:1.5px solid var(--border); background:transparent; color:var(--muted); font-size:17px; font-weight:800; }
+  .cbtn:disabled { opacity:.35; }
+  .cbtn.ok.sel  { background:rgba(52,208,88,.18); border-color:var(--green); color:var(--green); }
+  .cbtn.bad.sel { background:rgba(248,113,113,.15); border-color:var(--red); color:var(--red); }
+
+  /* ACTION SHEET */
+  .asheet { position:fixed; inset:0; z-index:400; background:rgba(0,0,0,.6); display:none; align-items:flex-end; }
+  .asheet.open { display:flex; }
+  .as-panel { width:100%; background:var(--surface); border-top:1px solid var(--border); border-radius:18px 18px 0 0; padding:10px 12px calc(12px + var(--safe-b)); display:flex; flex-direction:column; gap:6px; }
+  .as-title { font-size:12px; color:var(--muted); text-align:center; padding:6px 0 4px; }
+  .as-btn { width:100%; padding:15px; border-radius:12px; border:1px solid var(--border); background:var(--surface2); color:var(--text); font-size:15px; font-weight:600; }
+  .as-btn.danger { color:var(--red); }
+  .as-btn.cancel { background:transparent; margin-top:4px; }
+
+  /* FULLSCREEN */
+  .img-fs { display:none; position:fixed; inset:0; background:rgba(0,0,0,.95); z-index:500; align-items:center; justify-content:center; }
+  .img-fs.open { display:flex; }
+  .img-fs img { max-width:96vw; max-height:90vh; border-radius:10px; }
+
+  /* TOAST */
+  .toast { position:fixed; left:16px; right:16px; bottom:calc(var(--nav-h) + var(--safe-b) + 12px); z-index:600; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:12px 16px; font-size:14px; transform:translateY(20px); opacity:0; pointer-events:none; transition:all .25s; }
+  .toast.show { transform:translateY(0); opacity:1; }
+  .toast.success { border-color:var(--green); }
+  .toast.error { border-color:var(--red); }
+
+  /* AVANCE */
+  .stats { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px; }
+  .stat { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:12px 14px; }
+  .stat .v { font-size:24px; font-weight:800; }
+  .stat .l { font-size:11.5px; color:var(--muted); margin-top:2px; }
+  .stat.full { grid-column:1 / -1; }
+  .panel { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:14px; margin-bottom:12px; }
+  .ptitle { font-size:14px; font-weight:800; margin-bottom:12px; }
+  .bar-row { margin-bottom:12px; }
+  .bar-row:last-child { margin-bottom:0; }
+  .bar-label { font-size:12.5px; margin-bottom:5px; }
+  .bar-track { height:8px; border-radius:99px; background:var(--bg); border:1px solid var(--border); overflow:hidden; }
+  .bar-fill { height:100%; background:var(--teal); border-radius:99px; }
+  .bar-vals { display:flex; justify-content:space-between; font-size:11px; color:var(--muted); margin-top:4px; }
+  .donut-wrap { display:flex; align-items:center; gap:16px; }
+  .legend { display:flex; flex-direction:column; gap:8px; font-size:12.5px; }
+  .lrow { display:flex; align-items:center; gap:7px; }
+  .ldot { width:10px; height:10px; border-radius:3px; flex-shrink:0; }
+  .lpct { color:var(--muted); }
+  .mini-grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:12px; }
+  .mini { display:flex; flex-direction:column; align-items:center; gap:4px; text-align:center; }
+  .mini b { font-size:10.5px; }
+  .mini span { font-size:10px; color:var(--muted); }
+  .lrow-unit { display:flex; align-items:center; gap:10px; padding:10px 4px; border-bottom:1px solid rgba(28,48,34,.6); }
+  .lrow-unit:last-child { border-bottom:none; }
+  .lrow-unit:active { background:var(--surface2); }
+  .lu-name { width:86px; flex-shrink:0; font-size:14px; font-weight:700; display:flex; flex-direction:column; }
+  .lu-name small { font-size:9.5px; color:var(--muted); font-weight:500; text-transform:uppercase; letter-spacing:.4px; }
+  .lu-mid { flex:1; min-width:0; }
+  .lu-right { flex-shrink:0; text-align:right; font-size:11.5px; font-weight:700; }
+  .tag { display:inline-block; font-size:11px; font-weight:700; padding:3px 8px; border-radius:99px; }
+  .empty-mini { color:var(--muted); font-size:12.5px; padding:10px 2px; text-align:center; }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div>
+    <div class="logo">Fleet<span>Check</span> <span style="color:var(--muted);font-weight:600;font-size:12px;">móvil</span></div>
+    <div class="logo-sub">Stellantis · Inspección</div>
+  </div>
+  <div class="net" id="net">Conectando</div>
+</header>
+
+<!-- VISTA: INSPECCIÓN -->
+<main id="view-list" class="view active">
+  <div class="chips" id="plant-chips"></div>
+  <input class="search" id="search" type="search" inputmode="numeric" placeholder="Buscar unidad…" oninput="onSearch(this.value)">
+  <div id="units"></div>
+</main>
+
+<!-- VISTA: AVANCE -->
+<main id="view-avance" class="view"></main>
+
+<!-- NAV INFERIOR -->
+<nav class="bottom">
+  <button class="tab active" data-view="view-list" onclick="switchView('view-list')"><span class="ti">📋</span>Inspección</button>
+  <button class="tab" data-view="view-avance" onclick="switchView('view-avance')"><span class="ti">📊</span>Avance</button>
+</nav>
+
+<!-- DETALLE DE UNIDAD -->
+<div class="sheet" id="sheet">
+  <div class="sheet-head">
+    <button class="icon-btn" onclick="closeSheet()" aria-label="Regresar">‹</button>
+    <div class="sheet-title"><b id="sheet-title">Unidad</b><small id="sheet-sub"></small></div>
+    <button class="icon-btn" onclick="nextUnit()" style="font-size:13px;font-weight:700;">Sig. ›</button>
+  </div>
+  <div class="sheet-body" id="sheet-body"></div>
+</div>
+
+<div class="asheet" id="asheet" onclick="if(event.target===this) closeActions()"></div>
+<input type="file" id="file-input" accept="image/*" style="display:none">
+<div class="img-fs" id="img-fs" onclick="closeFullscreen()"><img id="img-fs-src" alt=""></div>
+<div class="toast" id="toast"></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script>
+// ─── FIREBASE ─────────────────────────────────────────────────────────────────
+const firebaseConfig = {
+  apiKey: "AIzaSyD3uFqBpV991wnc5IDRRd9eblNOyABtF4o",
+  authDomain: "fleettrack-yfais.firebaseapp.com",
+  projectId: "fleettrack-yfais",
+  storageBucket: "fleettrack-yfais.firebasestorage.app",
+  messagingSenderId: "6118541836",
+  appId: "1:6118541836:web:b384d6a84dbc3ec53abc29"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+// Redes móviles/proxys de operadoras suelen bloquear el canal normal: detecta y usa long-polling si hace falta.
+try { db.settings({ experimentalAutoDetectLongPolling: true, merge: true }); } catch (e) {}
+// Caché local (IndexedDB): la 2a vez abre al instante y permite marcar puntos sin señal.
+const persistenceReady = db.enablePersistence({ synchronizeTabs: true }).then(() => true).catch(() => false);
+
+// ─── CONSTANTES (iguales a la versión de escritorio) ──────────────────────────
+const PLANTAS = ["CAMIONES","EXTENSION","MOTORES NORTE","MOTORES SUR","VAN"];
+const COLOR_OK = '#34d058', COLOR_BAD = '#f87171', COLOR_PEND = '#1c3022';
+const CATEGORY_ORDER = ["Seguridad","Mecánica","Llantas","Eléctrico","Equipo de seguridad","limpieza y documentación","Confort y carrocería"];
+const CATEGORY_WEIGHTS = { "Seguridad":35, "Mecánica":20, "Llantas":15, "Eléctrico":10, "Equipo de seguridad":10, "limpieza y documentación":5, "Confort y carrocería":5 };
+
+// ─── ESTADO ───────────────────────────────────────────────────────────────────
+let unidades = [], apartados = [], checklistMap = {};
+const fotosCache = {};           // unidadId -> {1..10: dataURL|null} (se carga solo al abrir la unidad)
+let checklistLoaded = false;
+let selectedPlant = PLANTAS[0], searchQuery = '', currentUnitId = null;
+let avancePlantFilter = 'todas', currentView = 'view-list';
+
+// ─── UTILIDADES ───────────────────────────────────────────────────────────────
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function escAttr(s) { return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;'); }
+function withTimeout(p, ms, msg) { return Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(msg)), ms))]); }
+function ckey(u, a) { return u + '_' + a; }
+function getItem(u, a) { return checklistMap[ckey(u, a)] || {}; }
+function catLabel(cat) { const w = CATEGORY_WEIGHTS[cat]; return w !== undefined ? `${cat} (${w}%)` : cat; }
+function fmtDate(d) { return d.toLocaleDateString('es-MX', { day:'2-digit', month:'short' }); }
+
+let toastTimer;
+function showToast(msg, type = 'success') {
+  const t = document.getElementById('toast');
+  t.textContent = (type === 'success' ? '✓ ' : '✕ ') + msg;
+  t.className = 'toast show ' + type;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 3200);
+}
+function setNet(kind, label) { const n = document.getElementById('net'); n.className = 'net ' + kind; n.textContent = label; }
+
+// ─── CÁLCULOS ─────────────────────────────────────────────────────────────────
+function unitStats(u) {
+  let revisado = 0, cumple = 0; const total = apartados.length || 1;
+  apartados.forEach(a => { const c = getItem(u.id, a.id).cumple; if (c === true || c === false) revisado++; if (c === true) cumple++; });
+  return { revisado, cumple, total, pctRevisado: Math.round(revisado / total * 100), pctCumple: revisado ? Math.round(cumple / revisado * 100) : 0 };
+}
+function computeUnitScore(u) {
+  let score = 0;
+  CATEGORY_ORDER.forEach(cat => {
+    const items = apartados.filter(a => a.categoria === cat); if (!items.length) return;
+    if (!items.some(a => getItem(u.id, a.id).cumple === false)) score += CATEGORY_WEIGHTS[cat] || 0;
+  });
+  return score;
+}
+function classifyScore(s) {
+  if (s >= 95) return { label:'Excelente',    color:'#22c55e', range:'95-100' };
+  if (s >= 90) return { label:'Aceptable',    color:'#84cc16', range:'90-94' };
+  if (s >= 80) return { label:'Condicionada', color:'#f0a500', range:'80-89' };
+  if (s >= 70) return { label:'Deficiente',   color:'#f97316', range:'70-79' };
+  return              { label:'Crítico',      color:'#f87171', range:'<70' };
+}
+function groupApartados() {
+  const groups = [], idx = {};
+  apartados.forEach(a => { if (!(a.categoria in idx)) { idx[a.categoria] = groups.length; groups.push({ categoria:a.categoria, items:[] }); } groups[idx[a.categoria]].items.push(a); });
+  return groups;
+}
+
+// ─── CARGA DE DATOS ───────────────────────────────────────────────────────────
+function applyBase(uSnap, aSnap) {
+  unidades  = uSnap.docs.map(d => ({ id:d.id, ...d.data() }));
+  apartados = aSnap.docs.map(d => ({ id:d.id, ...d.data() }));
+}
+function applyChecklist(cSnap) {
+  checklistMap = {}; cSnap.docs.forEach(d => { checklistMap[d.id] = d.data(); });
+  checklistLoaded = true;
+}
+
+let loading = false;
+async function loadData() {
+  if (loading) return; loading = true;
+  if (!unidades.length) showUnitsState('loading', 'Conectando con la base de datos…');
+  const persist = await persistenceReady;
+
+  // 1) Lo último guardado en el teléfono: se muestra al instante.
+  if (persist) {
+    try {
+      const [u, a, c] = await Promise.all([
+        db.collection('ste_unidades').get({ source:'cache' }),
+        db.collection('ste_apartados').orderBy('orden').get({ source:'cache' }),
+        db.collection('ste_checklist').get({ source:'cache' })
+      ]);
+      if (u.size && a.size) { applyBase(u, a); if (c.size) applyChecklist(c); renderAll(); setNet('cache', 'Actualizando…'); }
+    } catch (e) { /* sin caché todavía */ }
+  }
+
+  // 2) Datos frescos del servidor (sin fotos).
+  try {
+    if (!unidades.length) showUnitsState('loading', 'Descargando unidades…');
+    const [u, a] = await withTimeout(Promise.all([
+      db.collection('ste_unidades').get({ source:'server' }),
+      db.collection('ste_apartados').orderBy('orden').get({ source:'server' })
+    ]), 25000, 'La conexión tardó demasiado');
+    applyBase(u, a); renderAll();
+    const c = await withTimeout(db.collection('ste_checklist').get({ source:'server' }), 45000, 'La conexión tardó demasiado');
+    applyChecklist(c); renderAll();
+    setNet('online', 'En línea');
+  } catch (e) {
+    if (unidades.length) {
+      setNet(navigator.onLine ? 'cache' : 'offline', navigator.onLine ? 'Señal débil' : 'Sin conexión');
+      showToast('Señal débil: mostrando datos guardados', 'error');
+    } else {
+      setNet('offline', 'Sin conexión');
+      showUnitsState('error', 'No se pudo conectar. Revisa la señal y vuelve a intentar.');
+    }
+  } finally { loading = false; }
+}
+
+window.addEventListener('online', () => { setNet('cache', 'Reconectando…'); loadData(); });
+window.addEventListener('offline', () => setNet('offline', 'Sin conexión'));
+
+// ─── RENDER GENERAL ───────────────────────────────────────────────────────────
+function renderAll() {
+  renderChips();
+  renderUnits();
+  if (currentView === 'view-avance') renderAvance();
+  if (currentUnitId) refreshSheet();
+}
+
+function showUnitsState(kind, msg) {
+  const el = document.getElementById('units');
+  el.innerHTML = kind === 'loading'
+    ? `<div class="state"><div class="spinner"></div>${escHtml(msg)}</div>`
+    : `<div class="state"><div class="icon">📶</div>${escHtml(msg)}<br><button class="btn btn-primary" onclick="loadData()">Reintentar</button></div>`;
+}
+
+// ─── INSPECCIÓN ───────────────────────────────────────────────────────────────
+function renderChips() {
+  document.getElementById('plant-chips').innerHTML = PLANTAS.map(p => {
+    const n = unidades.filter(u => u.planta === p).length;
+    return `<button class="chip${selectedPlant === p ? ' active' : ''}" onclick="selectPlant('${escAttr(p)}')">${escHtml(p)} <span class="n">(${n})</span></button>`;
+  }).join('');
+}
+function selectPlant(p) { selectedPlant = p; renderChips(); renderUnits(); window.scrollTo(0, 0); }
+function onSearch(v) { searchQuery = v.trim().toLowerCase(); renderUnits(); }
+
+function currentList() {
+  let list = unidades.filter(u => u.planta === selectedPlant);
+  if (searchQuery) list = list.filter(u => String(u.numero).toLowerCase().includes(searchQuery));
+  return list.sort((a, b) => Number(a.numero) - Number(b.numero));
+}
+
+function renderUnits() {
+  if (!unidades.length) return;
+  const el = document.getElementById('units');
+  const list = currentList();
+  const notice = checklistLoaded ? '' : '<div class="notice">Cargando revisiones… las calificaciones aparecerán en un momento.</div>';
+  if (!list.length) { el.innerHTML = notice + '<div class="state"><div class="icon">🚌</div>Sin unidades para mostrar</div>'; return; }
+  el.innerHTML = notice + `<div class="units-grid">${list.map(renderUnitCard).join('')}</div>`;
+}
+
+function renderUnitCard(u) {
+  const s = unitStats(u);
+  const okPct = s.cumple / s.total * 100, badPct = (s.revisado - s.cumple) / s.total * 100;
+  const score = computeUnitScore(u), tier = classifyScore(score);
+  const stat = !checklistLoaded ? '<span style="color:var(--muted)">…</span>'
+    : s.revisado ? `<span style="color:${tier.color}">${score} · ${tier.label}</span>` : '<span style="color:var(--muted)">Sin revisar</span>';
+  return `<button class="ucard" onclick="openUnit('${escAttr(u.id)}')">
+    <div class="ucard-top"><span class="unum">${escHtml(u.numero)}</span><span class="ubadge">${s.revisado}/${s.total}</span></div>
+    <div class="progress"><div class="ok" style="width:${okPct}%"></div><div class="bad" style="width:${badPct}%"></div></div>
+    <div class="ustat">${stat}</div>
+    <div class="umeta">${s.pctRevisado}% revisado</div>
+  </button>`;
+}
+
+// ─── DETALLE DE UNIDAD ────────────────────────────────────────────────────────
+function openUnit(id) {
+  currentUnitId = id;
+  renderSheet();
+  document.getElementById('sheet').classList.add('open');
+  document.body.style.overflow = 'hidden';
+  history.pushState({ sheet:1 }, '');
+}
+function closeSheet() {
+  if (history.state && history.state.sheet) history.back(); else hideSheet();
+}
+function hideSheet() {
+  document.getElementById('sheet').classList.remove('open');
+  document.body.style.overflow = '';
+  currentUnitId = null; closeActions(); closeFullscreen();
+}
+window.addEventListener('popstate', () => { if (currentUnitId) hideSheet(); });
+
+function nextUnit() {
+  const list = currentList(); if (!list.length) return;
+  const i = list.findIndex(u => u.id === currentUnitId);
+  const next = list[(i + 1) % list.length];
+  currentUnitId = next.id; renderSheet();
+  document.getElementById('sheet-body').scrollTop = 0;
+}
+
+function renderSheet() {
+  const u = unidades.find(x => x.id === currentUnitId); if (!u) return;
+  document.getElementById('sheet-title').textContent = '🚌 Unidad ' + u.numero;
+  document.getElementById('sheet-sub').textContent = u.planta;
+  const groups = groupApartados();
+  const notice = checklistLoaded ? '' : '<div class="notice">Cargando revisiones guardadas… espera un momento antes de marcar.</div>';
+  document.getElementById('sheet-body').innerHTML = `
+    ${notice}
+    <div class="summary" id="sheet-summary">${renderSummary(u)}</div>
+    <div class="sec-title">Evidencia fotográfica</div>
+    <div class="photos" id="photos-row">${renderPhotos(u.id)}</div>
+    ${groups.map((g, gi) => `
+      <div class="cat">
+        <div class="sec-title"><span>${escHtml(catLabel(g.categoria))}</span><span class="cc" id="cc-${gi}">${catCountHtml(u, g.items)}</span></div>
+        ${g.items.map(a => renderCheckRow(u, a)).join('')}
+      </div>`).join('')}
+  `;
+  loadFotos(u.id);
+}
+
+function renderSummary(u) {
+  const s = unitStats(u), score = computeUnitScore(u), tier = classifyScore(score);
+  return `
+    <div class="sbox"><div class="l">Avance</div><div class="v">${s.revisado}/${s.total} <span style="font-size:12px;color:var(--muted)">(${s.pctRevisado}%)</span></div></div>
+    <div class="sbox"><div class="l">Calificación</div><div class="v" style="color:${s.revisado ? tier.color : 'var(--muted)'}">${s.revisado ? score + ' · ' + tier.label : '—'}</div></div>
+    <div class="sbox full"><div class="l">Fecha atención</div>
+      <input class="date-in" type="date" value="${escHtml(u.fechaAtencion || '')}" onchange="changeFechaAtencion('${escAttr(u.id)}', this.value)"></div>`;
+}
+
+function catCountHtml(u, items) {
+  let ok = 0, bad = 0;
+  items.forEach(a => { const c = getItem(u.id, a.id).cumple; if (c === true) ok++; else if (c === false) bad++; });
+  return `<span class="cc-ok">${ok}✓</span> <span class="cc-bad">${bad}✗</span> <span class="cc-n">/ ${items.length}</span>`;
+}
+
+function renderCheckRow(u, a) {
+  const c = getItem(u.id, a.id).cumple, dis = checklistLoaded ? '' : ' disabled';
+  return `<div class="crow">
+    <div class="cname">${escHtml(a.nombre)}</div>
+    <div class="cbtns">
+      <button class="cbtn ok${c === true ? ' sel' : ''}"  id="ok-${a.id}"  onclick="setCumple('${escAttr(a.id)}', true)"${dis} aria-label="Cumple">✓</button>
+      <button class="cbtn bad${c === false ? ' sel' : ''}" id="bad-${a.id}" onclick="setCumple('${escAttr(a.id)}', false)"${dis} aria-label="No cumple">✗</button>
+    </div>
+  </div>`;
+}
+
+// Actualiza estados sin redibujar todo (no pierde el scroll).
+function refreshSheet() {
+  const u = unidades.find(x => x.id === currentUnitId); if (!u) { hideSheet(); return; }
+  const needsFull = !document.getElementById('sheet-summary') || (checklistLoaded && document.querySelector('#sheet-body .cbtn:disabled'));
+  if (needsFull) { const st = document.getElementById('sheet-body').scrollTop; renderSheet(); document.getElementById('sheet-body').scrollTop = st; return; }
+  document.getElementById('sheet-summary').innerHTML = renderSummary(u);
+  apartados.forEach(a => {
+    const c = getItem(u.id, a.id).cumple;
+    const ok = document.getElementById('ok-' + a.id), bad = document.getElementById('bad-' + a.id);
+    if (ok) ok.classList.toggle('sel', c === true);
+    if (bad) bad.classList.toggle('sel', c === false);
+  });
+  groupApartados().forEach((g, gi) => { const el = document.getElementById('cc-' + gi); if (el) el.innerHTML = catCountHtml(u, g.items); });
+}
+
+function setCumple(apartadoId, val) {
+  if (!checklistLoaded) return;
+  const u = unidades.find(x => x.id === currentUnitId); if (!u) return;
+  const key = ckey(u.id, apartadoId);
+  const cur = checklistMap[key] ? checklistMap[key].cumple : undefined;
+  const newVal = (cur === val) ? null : val;
+  checklistMap[key] = { ...(checklistMap[key] || {}), cumple:newVal };
+  if (navigator.vibrate) navigator.vibrate(12);
+  refreshSheet(); renderUnits();
+  db.collection('ste_checklist').doc(key).set({
+    unidadId:u.id, apartadoId, cumple:newVal,
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  }, { merge:true }).catch(e => showToast('Error guardando: ' + e.message, 'error'));
+  if (!navigator.onLine) showToast('Guardado en el teléfono; se sincroniza al volver la señal');
+}
+
+function changeFechaAtencion(id, value) {
+  const u = unidades.find(x => x.id === id);
+  if (u) { if (value) u.fechaAtencion = value; else delete u.fechaAtencion; }
+  db.collection('ste_unidades').doc(id).update({ fechaAtencion: value ? value : firebase.firestore.FieldValue.delete() })
+    .catch(e => showToast('Error: ' + e.message, 'error'));
+  showToast('Fecha de atención actualizada');
+}
+
+// ─── FOTOS (solo se descargan al abrir la unidad) ─────────────────────────────
+function renderPhotos(unitId) {
+  const f = fotosCache[unitId];
+  return Array.from({ length:10 }, (_, k) => k + 1).map(i => {
+    if (f === undefined) return `<div class="pslot loading">Foto ${i}<span>…</span></div>`;
+    const url = f && f[i];
+    return url
+      ? `<div class="pslot filled" style="background-image:url('${url}')" onclick="photoActions(${i})"></div>`
+      : `<div class="pslot empty" onclick="photoActions(${i})">Foto ${i}<span>＋</span></div>`;
+  }).join('');
+}
+function repaintPhotos(unitId) {
+  if (currentUnitId !== unitId) return;
+  const row = document.getElementById('photos-row'); if (row) row.innerHTML = renderPhotos(unitId);
+}
+async function loadFotos(unitId) {
+  if (fotosCache[unitId] !== undefined) return;
+  try {
+    const d = await withTimeout(db.collection('ste_unidad_fotos').doc(unitId).get(), 30000, 'timeout');
+    const data = d.exists ? d.data() : {};
+    const f = {}; for (let i = 1; i <= 10; i++) f[i] = data['foto' + i] || null;
+    fotosCache[unitId] = f;
+  } catch (e) {
+    fotosCache[unitId] = {};
+    showToast('No se pudieron cargar las fotos (señal débil)', 'error');
+  }
+  repaintPhotos(unitId);
+}
+
+function photoActions(i) {
+  const f = fotosCache[currentUnitId] || {};
+  const pick = [
+    { label:'📷 Tomar foto', fn:() => pickPhoto(i, 'camera') },
+    { label:'📁 Elegir de galería', fn:() => pickPhoto(i, 'gallery') }
+  ];
+  if (f[i]) openActions('Foto ' + i, [{ label:'👁 Ver', fn:() => openFullscreen(f[i]) }, ...pick, { label:'🗑 Borrar', danger:true, fn:() => deletePhoto(i) }]);
+  else openActions('Foto ' + i, pick);
+}
+
+function pickPhoto(i, mode) {
+  const input = document.getElementById('file-input');
+  if (mode === 'camera') input.setAttribute('capture', 'environment'); else input.removeAttribute('capture');
+  const unitId = currentUnitId;
+  input.value = '';
+  input.onchange = ev => uploadPhoto(ev, unitId, i);
+  input.click();
+}
+
+function toBase64Compressed(file, maxDim = 900, quality = 0.65) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > height) { if (width > maxDim) { height = height * maxDim / width; width = maxDim; } }
+        else { if (height > maxDim) { width = width * maxDim / height; height = maxDim; } }
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = () => reject(new Error('Imagen inválida'));
+      img.src = e.target.result;
+    };
+    reader.onerror = () => reject(new Error('No se pudo leer el archivo'));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function uploadPhoto(ev, unitId, i) {
+  const file = ev.target.files[0];
+  document.getElementById('file-input').removeAttribute('capture');
+  if (!file) return;
+  try {
+    const b64 = await toBase64Compressed(file);
+    if (!fotosCache[unitId]) fotosCache[unitId] = {};
+    fotosCache[unitId][i] = b64;
+    repaintPhotos(unitId);
+    await db.collection('ste_unidad_fotos').doc(unitId).set({
+      unidadId:unitId, ['foto' + i]: b64,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge:true });
+    showToast('Foto guardada');
+  } catch (e) { showToast('Error subiendo imagen: ' + e.message, 'error'); }
+}
+
+async function deletePhoto(i) {
+  if (!confirm('¿Eliminar esta foto?')) return;
+  const unitId = currentUnitId;
+  if (fotosCache[unitId]) fotosCache[unitId][i] = null;
+  repaintPhotos(unitId);
+  try {
+    await db.collection('ste_unidad_fotos').doc(unitId).set({
+      ['foto' + i]: firebase.firestore.FieldValue.delete(),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge:true });
+    showToast('Foto eliminada');
+  } catch (e) { showToast('Error: ' + e.message, 'error'); }
+}
+
+// Action sheet
+let asActions = [];
+function openActions(title, actions) {
+  asActions = actions;
+  const el = document.getElementById('asheet');
+  el.innerHTML = `<div class="as-panel"><div class="as-title">${escHtml(title)}</div>
+    ${actions.map((a, k) => `<button class="as-btn${a.danger ? ' danger' : ''}" onclick="runAction(${k})">${a.label}</button>`).join('')}
+    <button class="as-btn cancel" onclick="closeActions()">Cancelar</button></div>`;
+  el.classList.add('open');
+}
+function runAction(k) { const a = asActions[k]; closeActions(); if (a) a.fn(); }
+function closeActions() { document.getElementById('asheet').classList.remove('open'); }
+function openFullscreen(url) { document.getElementById('img-fs-src').src = url; document.getElementById('img-fs').classList.add('open'); }
+function closeFullscreen() { document.getElementById('img-fs').classList.remove('open'); }
+
+// ─── NAVEGACIÓN ───────────────────────────────────────────────────────────────
+function switchView(id) {
+  currentView = id;
+  document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === id));
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.view === id));
+  if (id === 'view-avance') renderAvance();
+  window.scrollTo(0, 0);
+}
+function jumpToUnit(planta, id) {
+  selectedPlant = planta; searchQuery = ''; document.getElementById('search').value = '';
+  switchView('view-list'); renderChips(); renderUnits(); openUnit(id);
+}
+
+// ─── AVANCE ───────────────────────────────────────────────────────────────────
+function donutChart(segments, size = 130, sw = 18) {
+  const total = segments.reduce((s, x) => s + x.value, 0) || 1;
+  const r = (size - sw) / 2, circ = 2 * Math.PI * r; let off = 0;
+  const arcs = segments.filter(s => s.value > 0).map(seg => {
+    const dash = seg.value / total * circ;
+    const el = `<circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="${seg.color}" stroke-width="${sw}" stroke-dasharray="${dash} ${circ - dash}" stroke-dashoffset="${-off}" transform="rotate(-90 ${size/2} ${size/2})"/>`;
+    off += dash; return el;
+  }).join('');
+  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" style="flex-shrink:0"><circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="${COLOR_PEND}" stroke-width="${sw}"/>${arcs}</svg>`;
+}
+function distribucion(units) {
+  let cumple = 0, noCumple = 0;
+  units.forEach(u => apartados.forEach(a => { const c = getItem(u.id, a.id).cumple; if (c === true) cumple++; else if (c === false) noCumple++; }));
+  const totalPosible = units.length * apartados.length;
+  return { cumple, noCumple, pendiente: Math.max(totalPosible - cumple - noCumple, 0), totalPosible };
+}
+function cColor(p) { return p >= 80 ? 'var(--green)' : p >= 50 ? 'var(--amber)' : 'var(--red)'; }
+function barRow(r) {
+  return `<div class="bar-row"><div class="bar-label">${escHtml(r.label)}</div>
+    <div class="bar-track"><div class="bar-fill" style="width:${r.pctA}%;${r.color ? 'background:' + r.color : ''}"></div></div>
+    <div class="bar-vals"><span>${r.left}</span><span style="color:${r.rightColor || 'var(--muted)'}">${r.right}</span></div></div>`;
+}
+
+function renderAvance() {
+  const el = document.getElementById('view-avance');
+  if (!unidades.length || !checklistLoaded) { el.innerHTML = '<div class="state"><div class="spinner"></div>Cargando revisiones…</div>'; return; }
+
+  const units = avancePlantFilter === 'todas' ? unidades : unidades.filter(u => u.planta === avancePlantFilter);
+  const totalAp = apartados.length, totalPosible = units.length * totalAp;
+  let rev = 0, cum = 0, completas = 0;
+  const rows = units.map(u => { const s = unitStats(u), score = computeUnitScore(u); rev += s.revisado; cum += s.cumple; if (s.pctRevisado === 100) completas++; return { u, s, score }; });
+  const pctA = totalPosible ? Math.round(rev / totalPosible * 100) : 0;
+  const pctC = rev ? Math.round(cum / rev * 100) : 0;
+  const avg = rows.length ? Math.round(rows.reduce((s, x) => s + x.score, 0) / rows.length) : 0;
+  const avgTier = classifyScore(avg);
+
+  const chips = ['todas', ...PLANTAS].map(p => `<button class="chip${avancePlantFilter === p ? ' active' : ''}" onclick="avancePlantFilter='${escAttr(p)}';renderAvance()">${p === 'todas' ? 'Todas' : escHtml(p)}</button>`).join('');
+
+  const d = distribucion(units);
+  const segs = [{ value:d.cumple, color:COLOR_OK, label:'Cumple' }, { value:d.noCumple, color:COLOR_BAD, label:'No cumple' }, { value:d.pendiente, color:COLOR_PEND, label:'Pendiente' }];
+
+  const cats = [...new Set(apartados.map(a => a.categoria))].sort((a, b) => CATEGORY_ORDER.indexOf(a) - CATEGORY_ORDER.indexOf(b));
+  const catRows = cats.map(cat => {
+    const aps = apartados.filter(a => a.categoria === cat); let r = 0, c = 0;
+    units.forEach(u => aps.forEach(a => { const v = getItem(u.id, a.id).cumple; if (v === true || v === false) r++; if (v === true) c++; }));
+    const tot = units.length * aps.length, pa = tot ? Math.round(r / tot * 100) : 0, pc = r ? Math.round(c / r * 100) : 0;
+    return { label:catLabel(cat), pctA:pa, left:pa + '% avance', right:pc + '% cumple', rightColor:cColor(pc) };
+  });
+
+  let plantasHtml = '';
+  if (avancePlantFilter === 'todas') {
+    const pr = PLANTAS.map(p => {
+      const us = unidades.filter(u => u.planta === p); let r = 0, c = 0;
+      us.forEach(u => { const s = unitStats(u); r += s.revisado; c += s.cumple; });
+      const tot = us.length * totalAp, pa = tot ? Math.round(r / tot * 100) : 0, pc = r ? Math.round(c / r * 100) : 0;
+      return { label:`${p} (${us.length})`, pctA:pa, left:pa + '% avance', right:pc + '% cumple', rightColor:cColor(pc) };
+    });
+    const minis = PLANTAS.map(p => {
+      const dd = distribucion(unidades.filter(u => u.planta === p)), r = dd.cumple + dd.noCumple;
+      return `<div class="mini">${donutChart([{ value:dd.cumple, color:COLOR_OK }, { value:dd.noCumple, color:COLOR_BAD }, { value:dd.pendiente, color:COLOR_PEND }], 64, 9)}
+        <b>${escHtml(p)}</b><span>${r ? Math.round(dd.cumple / r * 100) + '% cumple' : 'Sin datos'}</span></div>`;
+    }).join('');
+    plantasHtml = `<div class="panel"><div class="ptitle">Avance por planta</div>${pr.map(barRow).join('')}</div>
+      <div class="panel"><div class="ptitle">Cumplimiento por planta</div><div class="mini-grid">${minis}</div></div>`;
+  }
+
+  const tiers = [{ label:'Excelente', range:'95-100', color:'#22c55e' }, { label:'Aceptable', range:'90-94', color:'#84cc16' }, { label:'Condicionada', range:'80-89', color:'#f0a500' }, { label:'Deficiente', range:'70-79', color:'#f97316' }, { label:'Crítico', range:'<70', color:'#f87171' }];
+  const counts = {}; tiers.forEach(t => counts[t.label] = 0);
+  rows.forEach(x => counts[classifyScore(x.score).label]++);
+  const nU = rows.length || 1;
+  const clasif = tiers.map(t => { const n = counts[t.label], p = Math.round(n / nU * 100); return { label:`${t.label} (${t.range})`, pctA:p, color:t.color, left:`${n} unidad${n === 1 ? '' : 'es'}`, right:p + '%' }; });
+
+  // Próximas atenciones (sustituye al Gantt en pantalla chica)
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const fechas = units.filter(u => u.fechaAtencion).map(u => ({ u, d:new Date(u.fechaAtencion + 'T00:00:00') })).filter(x => !isNaN(x.d)).sort((a, b) => a.d - b.d);
+  const atencionHtml = fechas.length ? fechas.slice(0, 40).map(x => {
+    const diff = Math.round((x.d - today) / 86400000);
+    const tag = diff < 0 ? `<span class="tag" style="background:rgba(248,113,113,.15);color:var(--red)">Vencida ${-diff} d</span>`
+      : diff === 0 ? `<span class="tag" style="background:rgba(240,165,0,.15);color:var(--amber)">Hoy</span>`
+      : `<span class="tag" style="background:rgba(45,212,191,.12);color:var(--teal)">En ${diff} d</span>`;
+    return `<div class="lrow-unit" onclick="jumpToUnit('${escAttr(x.u.planta)}','${escAttr(x.u.id)}')">
+      <div class="lu-name">🚌 ${escHtml(x.u.numero)}<small>${escHtml(x.u.planta)}</small></div>
+      <div class="lu-mid" style="font-size:13px;">${fmtDate(x.d)}</div>
+      <div class="lu-right">${tag}</div></div>`;
+  }).join('') : '<div class="empty-mini">Aún no hay fechas de atención registradas.</div>';
+
+  const ranking = [...rows].sort((a, b) => a.s.pctRevisado - b.s.pctRevisado).slice(0, 12).map(r => {
+    const t = classifyScore(r.score);
+    return `<div class="lrow-unit" onclick="jumpToUnit('${escAttr(r.u.planta)}','${escAttr(r.u.id)}')">
+      <div class="lu-name">🚌 ${escHtml(r.u.numero)}<small>${escHtml(r.u.planta)}</small></div>
+      <div class="lu-mid"><div class="bar-track"><div class="bar-fill" style="width:${r.s.pctRevisado}%;background:var(--amber)"></div></div>
+        <div style="font-size:10.5px;color:var(--muted);margin-top:3px;">${r.s.pctRevisado}% revisado</div></div>
+      <div class="lu-right" style="color:${t.color}">${r.score}<br><span style="font-weight:500;font-size:10.5px;">${t.label}</span></div></div>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="h1">Avance general</div>
+    <div class="sub">${avancePlantFilter === 'todas' ? 'Todas las plantas' : escHtml(avancePlantFilter)} · ${units.length} unidades</div>
+    <div class="chips">${chips}</div>
+    <div class="stats">
+      <div class="stat"><div class="v">${pctA}%</div><div class="l">Avance</div></div>
+      <div class="stat"><div class="v" style="color:${cColor(pctC)}">${pctC}%</div><div class="l">Cumplimiento</div></div>
+      <div class="stat"><div class="v">${completas}/${units.length}</div><div class="l">Unidades completas</div></div>
+      <div class="stat"><div class="v" style="color:${avgTier.color}">${avg}</div><div class="l">Calificación (${avgTier.label})</div></div>
+      <div class="stat full"><div class="v" style="font-size:18px;">${rev} / ${totalPosible}</div><div class="l">Puntos revisados</div></div>
+    </div>
+    <div class="panel"><div class="ptitle">Distribución de puntos</div>
+      <div class="donut-wrap">${donutChart(segs)}
+        <div class="legend">${segs.map(s => `<div class="lrow"><span class="ldot" style="background:${s.color}"></span>${s.label} <b>${s.value}</b> <span class="lpct">(${d.totalPosible ? Math.round(s.value / d.totalPosible * 100) : 0}%)</span></div>`).join('')}</div>
+      </div></div>
+    <div class="panel"><div class="ptitle">Cumplimiento por categoría</div>${catRows.map(barRow).join('')}</div>
+    <div class="panel"><div class="ptitle">Clasificación por calificación ponderada</div>${clasif.map(barRow).join('')}</div>
+    ${plantasHtml}
+    <div class="panel"><div class="ptitle">Próximas atenciones</div>${atencionHtml}</div>
+    <div class="panel"><div class="ptitle">Requieren atención (menor avance)</div>${ranking}</div>
+  `;
+}
+
+// ─── INICIO ───────────────────────────────────────────────────────────────────
+loadData();
+</script>
+</body>
+</html>
