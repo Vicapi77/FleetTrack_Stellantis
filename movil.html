@@ -180,6 +180,13 @@
   .lu-right { flex-shrink:0; text-align:right; font-size:11.5px; font-weight:700; }
   .tag { display:inline-block; font-size:11px; font-weight:700; padding:3px 8px; border-radius:99px; }
   .empty-mini { color:var(--muted); font-size:12.5px; padding:10px 2px; text-align:center; }
+
+  /* DIAGNÓSTICO */
+  .diag { position:fixed; left:0; right:0; bottom:0; z-index:700; max-height:60vh; display:none; flex-direction:column; background:#020602; border-top:2px solid var(--amber); padding-bottom:var(--safe-b); }
+  .diag.open { display:flex; }
+  .diag-head { display:flex; align-items:center; gap:8px; padding:8px 10px; border-bottom:1px solid var(--border); }
+  .diag-head b { flex:1; font-size:13px; color:var(--amber); }
+  .diag pre { flex:1; overflow:auto; margin:0; padding:10px 12px; font:11.5px/1.45 ui-monospace, Menlo, Consolas, monospace; color:var(--accent2); white-space:pre-wrap; word-break:break-word; user-select:text; -webkit-user-select:text; }
 </style>
 </head>
 <body>
@@ -189,7 +196,7 @@
     <div class="logo">Fleet<span>Check</span> <span style="color:var(--muted);font-weight:600;font-size:12px;">móvil</span></div>
     <div class="logo-sub">Stellantis · Inspección</div>
   </div>
-  <div class="net" id="net">Conectando</div>
+  <div class="net" id="net" onclick="showDiag()">Conectando</div>
 </header>
 
 <!-- VISTA: INSPECCIÓN -->
@@ -222,6 +229,21 @@
 <input type="file" id="file-input" accept="image/*" style="display:none">
 <div class="img-fs" id="img-fs" onclick="closeFullscreen()"><img id="img-fs-src" alt=""></div>
 <div class="toast" id="toast"></div>
+<div class="diag" id="diag">
+  <div class="diag-head"><b>Diagnóstico de conexión</b>
+    <button class="btn btn-primary" style="padding:8px 14px;font-size:13px;" onclick="copyDiag()">Copiar</button>
+    <button class="icon-btn" onclick="hideDiag()" aria-label="Cerrar">✕</button></div>
+  <pre id="diag-log"></pre>
+</div>
+<script>
+  // Si este bloque corre pero el de abajo nunca termina, el panel igual muestra algo.
+  setTimeout(function () {
+    if (typeof firebase === 'undefined') {
+      document.getElementById('diag').classList.add('open');
+      document.getElementById('diag-log').textContent = 'FALLO: a los 15 s la librería de Firebase (www.gstatic.com) no ha descargado.\nNavegador: ' + navigator.userAgent;
+    }
+  }, 15000);
+</script>
 
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
@@ -235,12 +257,41 @@ const firebaseConfig = {
   messagingSenderId: "6118541836",
   appId: "1:6118541836:web:b384d6a84dbc3ec53abc29"
 };
+// ─── DIAGNÓSTICO EN PANTALLA ─────────────────────────────────────────────────
+const T0 = Date.now();
+const diagLines = [];
+function diag(msg) {
+  const line = `${((Date.now() - T0) / 1000).toFixed(1)}s  ${msg}`;
+  diagLines.push(line); console.log('[diag] ' + line);
+  const el = document.getElementById('diag-log'); if (el) el.textContent = diagLines.join('\n');
+}
+window.addEventListener('error', e => diag('ERROR: ' + (e.message || e.type) + (e.filename ? ' @ ' + e.filename.split('/').pop() : '')), true);
+window.addEventListener('unhandledrejection', e => diag('ERROR promesa: ' + (e.reason && e.reason.message || e.reason)));
+try { const prev = sessionStorage.getItem('fc_diag'); if (prev) { diagLines.push('— intento anterior —', prev, '— nuevo intento —'); sessionStorage.removeItem('fc_diag'); } } catch (_) {}
+diag('Página abierta · ' + navigator.userAgent.replace(/^Mozilla\/5\.0 /, ''));
+diag('Red según el teléfono: ' + (navigator.onLine ? 'en línea' : 'SIN conexión') + (navigator.connection ? ' · tipo ' + (navigator.connection.effectiveType || '?') : ''));
+
+if (typeof firebase === 'undefined') {
+  diag('FALLO: no se pudo descargar la librería de Firebase (www.gstatic.com bloqueado o sin red)');
+  throw new Error('firebase no cargó');
+}
+diag('Librería Firebase descargada');
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
-// Redes móviles/proxys de operadoras suelen bloquear el canal normal: detecta y usa long-polling si hace falta.
-try { db.settings({ experimentalAutoDetectLongPolling: true, merge: true }); } catch (e) {}
-// Caché local (IndexedDB): la 2a vez abre al instante y permite marcar puntos sin señal.
-const persistenceReady = db.enablePersistence({ synchronizeTabs: true }).then(() => true).catch(() => false);
+// Long-polling forzado: el canal "streaming" normal de Firestore se queda colgado en muchas redes
+// móviles, proxys de operadoras, VPN y navegadores dentro de apps (WhatsApp, Facebook). Long-polling es más lento, pero pasa.
+// Primer intento: modo automático (rápido). Si no responde, la página se recarga con ?lp=1 (long-polling forzado).
+const FORCE_LP = /[?&]lp=1/.test(location.search);
+try {
+  if (FORCE_LP) db.settings({ experimentalForceLongPolling: true, experimentalAutoDetectLongPolling: false, merge: true });
+  else db.settings({ experimentalAutoDetectLongPolling: true, merge: true });
+  diag('Modo de conexión: ' + (FORCE_LP ? 'long-polling forzado (modo compatible)' : 'automático'));
+} catch (e) { diag('settings: ' + e.message); }
+// Caché local (IndexedDB). En algunos navegadores (iPhone modo privado, navegadores dentro de apps) se cuelga:
+// se le dan máximo 3 s y si no, se sigue sin caché.
+const persistenceReady = withTimeout(db.enablePersistence({ synchronizeTabs: true }).then(() => true), 3000, 'timeout')
+  .then(v => { diag('Caché local: activa'); return v; })
+  .catch(e => { diag('Caché local: no disponible (' + (e.code || e.message) + ')'); return false; });
 
 // ─── CONSTANTES (iguales a la versión de escritorio) ──────────────────────────
 const PLANTAS = ["CAMIONES","EXTENSION","MOTORES NORTE","MOTORES SUR","VAN"];
@@ -331,15 +382,27 @@ async function loadData() {
   // 2) Datos frescos del servidor (sin fotos).
   try {
     if (!unidades.length) showUnitsState('loading', 'Descargando unidades…');
+    diag('Pidiendo unidades y apartados al servidor…');
     const [u, a] = await withTimeout(Promise.all([
       db.collection('ste_unidades').get({ source:'server' }),
       db.collection('ste_apartados').orderBy('orden').get({ source:'server' })
-    ]), 25000, 'La conexión tardó demasiado');
+    ]), FORCE_LP ? 30000 : 12000, 'El servidor no respondió');
+    diag(`Recibido: ${u.size} unidades, ${a.size} apartados`);
     applyBase(u, a); renderAll();
+    diag('Pidiendo revisiones (checklist)…');
     const c = await withTimeout(db.collection('ste_checklist').get({ source:'server' }), 45000, 'La conexión tardó demasiado');
+    diag(`Recibido: ${c.size} revisiones · LISTO`);
     applyChecklist(c); renderAll();
     setNet('online', 'En línea');
   } catch (e) {
+    diag('FALLO al hablar con Firestore: ' + (e.code ? e.code + ' · ' : '') + e.message);
+    if (!FORCE_LP && !checklistLoaded && navigator.onLine) {
+      diag('Reintentando en modo compatible…');
+      try { sessionStorage.setItem('fc_diag', diagLines.join('\n')); } catch (_) {}
+      location.replace(location.pathname + '?lp=1');
+      return;
+    }
+    showDiag();
     if (unidades.length) {
       setNet(navigator.onLine ? 'cache' : 'offline', navigator.onLine ? 'Señal débil' : 'Sin conexión');
       showToast('Señal débil: mostrando datos guardados', 'error');
@@ -367,6 +430,18 @@ function showUnitsState(kind, msg) {
     ? `<div class="state"><div class="spinner"></div>${escHtml(msg)}</div>`
     : `<div class="state"><div class="icon">📶</div>${escHtml(msg)}<br><button class="btn btn-primary" onclick="loadData()">Reintentar</button></div>`;
 }
+
+// Panel de diagnóstico: se abre tocando el indicador de red, o solo si a los 15 s no ha cargado.
+function showDiag() { document.getElementById('diag').classList.add('open'); diag('(panel abierto)'); }
+function hideDiag() { document.getElementById('diag').classList.remove('open'); }
+function copyDiag() {
+  const txt = 'Diagnóstico FleetCheck móvil\n' + diagLines.join('\n');
+  (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject())
+    .then(() => showToast('Diagnóstico copiado; pégalo en el chat'))
+    .catch(() => { const r = document.createRange(); r.selectNodeContents(document.getElementById('diag-log')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); showToast('Selecciona y copia el texto', 'error'); });
+}
+setTimeout(() => { if (!unidades.length) { diag('Lleva 20 s sin recibir unidades'); showDiag(); } }, 20000);
+setTimeout(() => { if (!checklistLoaded) { diag('Lleva 60 s sin terminar de cargar revisiones'); showDiag(); } }, 60000);
 
 // ─── INSPECCIÓN ───────────────────────────────────────────────────────────────
 function renderChips() {
